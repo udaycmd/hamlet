@@ -318,5 +318,5 @@ func NewLexer(file io.ReadCloser, isMod bool) *Lexer {
 }
 
 func (l *Lexer) Next() *Token {
-
+	return nil
 }
