@@ -1,6 +1,14 @@
 package core
 
-import "os"
+import (
+	"bufio"
+	"io"
+	"unicode"
+)
+
+const (
+	maxLexBufSize = 8 * 1024 // 8 Kilobytes
+)
 
 type Tok uint8
 
@@ -262,20 +270,53 @@ type Token struct {
 	Kind   Tok
 }
 
-var InvalidToken = Token{
-	Offset: 0,
-	Start:  0,
-	Width:  0,
-	Kind:   INVALID}
-
 type Lexer struct {
 	IsModule bool
-	F        *os.File
-	Crune    rune
+	F        *bufio.Reader
+	Crune    rune // current rune
 	Cursor   uint32
 	Len      uint32
 	Line     uint32
 	Column   uint32
-	Ctoken   *Tok
-	Ptoken   *Tok
+	Ctoken   *Tok // current
+}
+
+func (l *Lexer) isNewLineTerminator() bool {
+	switch l.Crune {
+	case '\u2028', '\u2029', '\n', '\r':
+		return true
+	default:
+		return false
+	}
+}
+
+func (l *Lexer) isDigit() bool {
+	return unicode.IsDigit(l.Crune)
+}
+
+func (l *Lexer) isHexDigit() bool {
+	return unicode.Is(unicode.ASCII_Hex_Digit, l.Crune)
+}
+
+func (l *Lexer) isWhitespace() bool {
+	return unicode.Is(unicode.White_Space, l.Crune)
+}
+
+func (l *Lexer) isIdentStart() bool {
+	return l.Crune == '$' || l.Crune == '_' || unicode.IsLetter(l.Crune)
+}
+
+func (l *Lexer) isIdentContinue() bool {
+	return l.isIdentStart() || l.isDigit()
+}
+
+func NewLexer(file io.ReadCloser, isMod bool) *Lexer {
+	return &Lexer{
+		IsModule: isMod,
+		F:        bufio.NewReaderSize(file, maxLexBufSize),
+	}
+}
+
+func (l *Lexer) Next() *Token {
+
 }
