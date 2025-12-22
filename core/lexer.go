@@ -2,12 +2,19 @@ package core
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"unicode"
 )
 
 const (
 	maxLexBufSize = 8 * 1024 // 8 Kilobytes
+	eof           = rune(-1) // eof
+)
+
+var (
+	errUnexpectedUnicodeChar = errors.New("unexpected unicode codepoint")
+	errInvalidIdentStart     = errors.New("invalid start of an identifier name")
 )
 
 type Tok uint8
@@ -271,52 +278,118 @@ type Token struct {
 }
 
 type Lexer struct {
-	IsModule bool
-	F        *bufio.Reader
-	Crune    rune // current rune
-	Cursor   uint32
-	Len      uint32
-	Line     uint32
-	Column   uint32
-	Ctoken   *Tok // current
+	F         *bufio.Reader
+	Line      uint32
+	Column    uint32
+	CodePoint rune
+	Current   uint32
+	Ctoken    *Token
 }
 
-func (l *Lexer) isNewLineTerminator() bool {
-	switch l.Crune {
-	case '\u2028', '\u2029', '\n', '\r':
+func isNewLineTerminator(r rune) bool {
+	switch r {
+	case '\u2028', '\u2029', '\n':
 		return true
 	default:
 		return false
 	}
 }
 
-func (l *Lexer) isDigit() bool {
-	return unicode.IsDigit(l.Crune)
+func isDigit(r rune) bool {
+	return unicode.IsDigit(r)
 }
 
-func (l *Lexer) isHexDigit() bool {
-	return unicode.Is(unicode.ASCII_Hex_Digit, l.Crune)
+func isHexDigit(r rune) bool {
+	return unicode.Is(unicode.ASCII_Hex_Digit, r)
 }
 
-func (l *Lexer) isWhitespace() bool {
-	return unicode.Is(unicode.White_Space, l.Crune)
+func isWhitespace(r rune) bool {
+	return unicode.Is(unicode.White_Space, r)
 }
 
-func (l *Lexer) isIdentStart() bool {
-	return l.Crune == '$' || l.Crune == '_' || unicode.IsLetter(l.Crune)
+func isIdentStart(r rune) bool {
+	return r == '$' || r == '_' || unicode.IsLetter(r)
 }
 
-func (l *Lexer) isIdentContinue() bool {
-	return l.isIdentStart() || l.isDigit()
+func isIdentContinue(r rune) bool {
+	return isIdentStart(r) || isDigit(r)
 }
 
-func NewLexer(file io.ReadCloser, isMod bool) *Lexer {
+func NewLexer(file io.ReadCloser) *Lexer {
 	return &Lexer{
-		IsModule: isMod,
-		F:        bufio.NewReaderSize(file, maxLexBufSize),
+		F: bufio.NewReaderSize(file, maxLexBufSize),
 	}
 }
 
-func (l *Lexer) Next() *Token {
+func (l *Lexer) step() error {
+	codePoint, width, err := l.F.ReadRune()
+	if err != nil && err == io.EOF {
+		codePoint = eof
+		return nil
+	}
+
+	if codePoint == unicode.ReplacementChar {
+		return errUnexpectedUnicodeChar
+	}
+
+	if isNewLineTerminator(codePoint) {
+		l.Line++
+		l.Column = 0
+	} else {
+		if codePoint == '\t' {
+			l.Column += 4
+		}
+		l.Column++
+	}
+
+	l.CodePoint = codePoint
+	l.Current += uint32(width)
+
+	return err
+}
+
+func (l *Lexer) Next() error {
+	t := &Token{}
+
+	switch l.CodePoint {
+	case eof:
+		t.Kind = EOF
+	case '+':
+		t.Kind = PLUS
+	case '-':
+		t.Kind = MINUS
+	case '*':
+		t.Kind = STAR
+	case '/':
+		t.Kind = SLASH
+	case '%':
+		t.Kind = PERCENT
+	case '&':
+		t.Kind = AMPERSAND
+	case '|':
+		t.Kind = PIPE
+	case '~':
+		t.Kind = TILDE
+	case '^':
+		t.Kind = CARET
+	case '=':
+		t.Kind = EQUAL
+	case '!':
+		t.Kind = BANG
+	case '<':
+		t.Kind = LESS
+	case '>':
+		t.Kind = GREATER
+	case '?':
+		t.Kind = QUESTION
+	default:
+		if isIdentStart(l.CodePoint) {
+			// consume identifier
+		} else {
+			return errInvalidIdentStart
+		}
+	}
+
+	l.Ctoken = t
 	return nil
 }
