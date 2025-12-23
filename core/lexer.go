@@ -315,9 +315,11 @@ func isIdentContinue(r rune) bool {
 	return isIdentStart(r) || isDigit(r)
 }
 
-func NewLexer(file io.ReadCloser) *Lexer {
+func NewLexer(file io.Reader) *Lexer {
 	return &Lexer{
-		F: bufio.NewReaderSize(file, maxLexBufSize),
+		F:    bufio.NewReaderSize(file, maxLexBufSize),
+		Pos:  &Position{Line: 1, Column: 1},
+		Ppos: &Position{Line: 1, Column: 1},
 	}
 }
 
@@ -346,6 +348,10 @@ func (l *Lexer) step() {
 
 // Do not call twice without a l.step() in between
 func (l *Lexer) back() {
+	if l.CodePoint == eof {
+		return
+	}
+
 	err := l.F.UnreadRune()
 	if err != nil {
 		panic("hamlet_crash: " + err.Error())
@@ -356,190 +362,209 @@ func (l *Lexer) back() {
 }
 
 func (l *Lexer) Next() error {
-	t := &Token{}
+	t := &Token{Kind: INVALID}
+	l.step()
 
-	switch l.CodePoint {
-	case eof:
-		t.Kind = EOF
-	case '+':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = PLUS_EQ
-		} else {
-			l.back()
-			t.Kind = PLUS
-		}
-	case '-':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = MINUS_EQ
-		} else {
-			l.back()
-			t.Kind = MINUS
-		}
-	case '*':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = STAR_EQ
-		} else {
-			l.back()
-			t.Kind = STAR
-		}
-	case '/':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = SLASH_EQ
-		} else {
-			l.back()
-			t.Kind = SLASH
-		}
-	case '%':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = PERCENT_EQ
-		} else {
-			l.back()
-			t.Kind = PERCENT
-		}
-	case '&':
-		l.step()
+	for {
 		switch l.CodePoint {
-		case '=':
-			t.Kind = AND_EQ
+		case eof:
+			t.Kind = EOF
+		case '+':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = PLUS_EQ
+			} else {
+				l.back()
+				t.Kind = PLUS
+			}
+		case '-':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = MINUS_EQ
+			} else {
+				l.back()
+				t.Kind = MINUS
+			}
+		case '*':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = STAR_EQ
+			} else {
+				l.back()
+				t.Kind = STAR
+			}
+		case '/':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = SLASH_EQ
+			} else {
+				l.back()
+				t.Kind = SLASH
+			}
+		case '%':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = PERCENT_EQ
+			} else {
+				l.back()
+				t.Kind = PERCENT
+			}
 		case '&':
-			t.Kind = AND
-		default:
-			l.back()
-			t.Kind = AMPERSAND
-		}
-	case '|':
-		l.step()
-		switch l.CodePoint {
+			l.step()
+			switch l.CodePoint {
+			case '=':
+				t.Kind = AND_EQ
+			case '&':
+				t.Kind = AND
+			default:
+				l.back()
+				t.Kind = AMPERSAND
+			}
+		case '|':
+			l.step()
+			switch l.CodePoint {
+			case '=':
+				t.Kind = OR_EQ
+			case '|':
+				t.Kind = OR
+			default:
+				l.back()
+				t.Kind = PIPE
+			}
+		case '~':
+			l.step()
+			switch l.CodePoint {
+			case '=':
+				t.Kind = NOT_EQ_BIT
+			default:
+				l.back()
+				t.Kind = TILDE
+			}
 		case '=':
-			t.Kind = OR_EQ
-		case '&':
-			t.Kind = OR
-		default:
-			l.back()
-			t.Kind = PIPE
-		}
-	case '~':
-		l.step()
-		switch l.CodePoint {
-		case '=':
-			t.Kind = NOT_EQ_BIT
-		default:
-			l.back()
-			t.Kind = TILDE
-		}
-	case '=':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = EQUAL_EQUAL
-		} else {
-			l.back()
-			t.Kind = EQUAL
-		}
-	case '!':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = BANG_EQ
-		} else {
-			l.back()
-			t.Kind = BANG
-		}
-	case '.':
-		l.step()
-		if l.CodePoint == '.' {
-			t.Kind = DOT_DOT
-		} else {
-			l.back()
-			t.Kind = DOT
-		}
-	case ':':
-		l.step()
-		switch l.CodePoint {
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = EQUAL_EQUAL
+			} else {
+				l.back()
+				t.Kind = EQUAL
+			}
+		case '!':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = BANG_EQ
+			} else {
+				l.back()
+				t.Kind = BANG
+			}
+		case '.':
+			l.step()
+			if l.CodePoint == '.' {
+				t.Kind = DOT_DOT
+			} else {
+				l.back()
+				t.Kind = DOT
+			}
 		case ':':
-			t.Kind = DOUBLE_COLON
-		case '=':
-			t.Kind = WALRUS
-		default:
-			l.back()
-			t.Kind = COLON
-		}
-	case '<':
-		l.step()
-		switch l.CodePoint {
+			l.step()
+			switch l.CodePoint {
+			case ':':
+				t.Kind = DOUBLE_COLON
+			case '=':
+				t.Kind = WALRUS
+			default:
+				l.back()
+				t.Kind = COLON
+			}
 		case '<':
 			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = LSHIFT_EQ
-			} else {
+			switch l.CodePoint {
+			case '<':
+				l.step()
+				if l.CodePoint == '=' {
+					t.Kind = LSHIFT_EQ
+				} else {
+					l.back()
+					t.Kind = LEFT_SHIFT
+				}
+			case '=':
+				t.Kind = LESS_EQ
+			default:
 				l.back()
-				t.Kind = LEFT_SHIFT
+				t.Kind = LESS
 			}
-		case '=':
-			t.Kind = LESS_EQ
-		default:
-			l.back()
-			t.Kind = LESS
-		}
-	case '>':
-		l.step()
-		switch l.CodePoint {
 		case '>':
 			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = RSHIFT_EQ
-			} else {
-				l.back()
-				t.Kind = RIGHT_SHIFT
-			}
-		case '=':
-			t.Kind = GREATER_EQ
-		default:
-			l.back()
-			t.Kind = GREATER
-		}
-	case '^':
-		t.Kind = CARET
-	case '?':
-		t.Kind = QUESTION
-	case '(':
-		t.Kind = LEFT_PAREN
-	case ')':
-		t.Kind = RIGHT_PAREN
-	case '[':
-		t.Kind = LEFT_BRACKET
-	case ']':
-		t.Kind = RIGHT_BRACKET
-	case '{':
-		t.Kind = LEFT_BRACE
-	case '}':
-		t.Kind = RIGHT_BRACE
-	case ',':
-		t.Kind = COMMA
-	case ';':
-		t.Kind = SEMICOLON
-	default:
-		// skip whitespaces
-		for isWhitespace(l.CodePoint) {
-			l.step()
-		}
-
-		// identifiers
-		if isIdentStart(l.CodePoint) {
-			l.step()
-			for isIdentContinue(l.CodePoint) {
+			switch l.CodePoint {
+			case '>':
 				l.step()
+				if l.CodePoint == '=' {
+					t.Kind = RSHIFT_EQ
+				} else {
+					l.back()
+					t.Kind = RIGHT_SHIFT
+				}
+			case '=':
+				t.Kind = GREATER_EQ
+			default:
+				l.back()
+				t.Kind = GREATER
+			}
+		case '#': // single line comment
+		singleLineComment:
+			for {
+				l.step()
+				if isNewLineTerminator(l.CodePoint) || l.CodePoint == eof {
+					break singleLineComment
+				}
 			}
 
-			t.Kind = IDENTIFIER
-		} else {
-			return errInvalidIdentStart
-		}
-	}
+			continue
+		case '^':
+			t.Kind = CARET
+		case '?':
+			t.Kind = QUESTION
+		case '(':
+			t.Kind = LEFT_PAREN
+		case ')':
+			t.Kind = RIGHT_PAREN
+		case '[':
+			t.Kind = LEFT_BRACKET
+		case ']':
+			t.Kind = RIGHT_BRACKET
+		case '{':
+			t.Kind = LEFT_BRACE
+		case '}':
+			t.Kind = RIGHT_BRACE
+		case ',':
+			t.Kind = COMMA
+		case ';':
+			t.Kind = SEMICOLON
+		default:
+			// skip whitespaces
+			if isWhitespace(l.CodePoint) {
+				l.step()
+				continue
+			}
 
-	l.Token = t
-	return nil
+			// invalid unicode codepoint
+			if l.CodePoint == unicode.ReplacementChar {
+				return errUnexpectedUnicodeChar
+			}
+
+			// identifiers
+			if isIdentStart(l.CodePoint) {
+				l.step()
+				for isIdentContinue(l.CodePoint) {
+					l.step()
+				}
+
+				t.Kind = IDENTIFIER
+			} else {
+				return errInvalidIdentStart
+			}
+		}
+
+		l.Token = t
+		return nil
+	}
 }

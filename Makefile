@@ -1,4 +1,4 @@
-.PHONY: all build vet clean
+.PHONY: all build vet clean test
 
 BUILD_DIR ?= build
 LDFLAGS :=	-s -w
@@ -11,8 +11,11 @@ fmt:
 vet: fmt
 	go vet ./...
 
-build: vet
+build: vet test
 	go build -o $(BUILD_DIR)/ -ldflags="$(LDFLAGS)"
+
+test:
+	go test ./...
 
 clean:
 	rm -r $(BUILD_DIR)
