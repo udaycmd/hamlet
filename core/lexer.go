@@ -79,8 +79,6 @@ const (
 	GREATER
 	LESS_EQ
 	GREATER_EQ
-	PLUS_PLUS
-	MINUS_MINUS
 	QUESTION
 
 	// - Punctuations -
@@ -219,10 +217,6 @@ func (t Tok) String() string {
 		s = "<="
 	case GREATER_EQ:
 		s = ">="
-	case PLUS_PLUS:
-		s = "++"
-	case MINUS_MINUS:
-		s = "--"
 	case QUESTION:
 		s = "?"
 	case LEFT_PAREN:
@@ -270,6 +264,11 @@ func (t Tok) IsNumber() bool {
 	return t == INTEGER || t == REAL
 }
 
+type Position struct {
+	Line   uint32
+	Column uint32
+}
+
 type Token struct {
 	Offset uint32
 	Start  uint32
@@ -279,11 +278,12 @@ type Token struct {
 
 type Lexer struct {
 	F         *bufio.Reader
-	Line      uint32
-	Column    uint32
+	Pos       *Position
+	Ppos      *Position
+	Token     *Token
+	Cursor    uint32
+	Pcursor   uint32
 	CodePoint rune
-	Current   uint32
-	Ctoken    *Token
 }
 
 func isNewLineTerminator(r rune) bool {
@@ -321,31 +321,38 @@ func NewLexer(file io.ReadCloser) *Lexer {
 	}
 }
 
-func (l *Lexer) step() error {
-	codePoint, width, err := l.F.ReadRune()
-	if err != nil && err == io.EOF {
-		codePoint = eof
-		return nil
-	}
+func (l *Lexer) step() {
+	l.Ppos = l.Pos
+	l.Pcursor = l.Cursor
 
-	if codePoint == unicode.ReplacementChar {
-		return errUnexpectedUnicodeChar
+	codePoint, width, _ := l.F.ReadRune()
+	if width == 0 {
+		codePoint = eof
 	}
 
 	if isNewLineTerminator(codePoint) {
-		l.Line++
-		l.Column = 0
+		l.Pos.Line++
+		l.Pos.Column = 0
 	} else {
 		if codePoint == '\t' {
-			l.Column += 4
+			l.Pos.Column += 4
 		}
-		l.Column++
+		l.Pos.Column++
 	}
 
 	l.CodePoint = codePoint
-	l.Current += uint32(width)
+	l.Cursor += uint32(width)
+}
 
-	return err
+// Do not call twice without a l.step() in between
+func (l *Lexer) back() {
+	err := l.F.UnreadRune()
+	if err != nil {
+		panic("hamlet_crash: " + err.Error())
+	}
+
+	l.Pos = l.Ppos
+	l.Cursor = l.Pcursor
 }
 
 func (l *Lexer) Next() error {
@@ -355,41 +362,184 @@ func (l *Lexer) Next() error {
 	case eof:
 		t.Kind = EOF
 	case '+':
-		t.Kind = PLUS
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = PLUS_EQ
+		} else {
+			l.back()
+			t.Kind = PLUS
+		}
 	case '-':
-		t.Kind = MINUS
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = MINUS_EQ
+		} else {
+			l.back()
+			t.Kind = MINUS
+		}
 	case '*':
-		t.Kind = STAR
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = STAR_EQ
+		} else {
+			l.back()
+			t.Kind = STAR
+		}
 	case '/':
-		t.Kind = SLASH
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = SLASH_EQ
+		} else {
+			l.back()
+			t.Kind = SLASH
+		}
 	case '%':
-		t.Kind = PERCENT
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = PERCENT_EQ
+		} else {
+			l.back()
+			t.Kind = PERCENT
+		}
 	case '&':
-		t.Kind = AMPERSAND
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = AND_EQ
+		case '&':
+			t.Kind = AND
+		default:
+			l.back()
+			t.Kind = AMPERSAND
+		}
 	case '|':
-		t.Kind = PIPE
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = OR_EQ
+		case '&':
+			t.Kind = OR
+		default:
+			l.back()
+			t.Kind = PIPE
+		}
 	case '~':
-		t.Kind = TILDE
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = NOT_EQ_BIT
+		default:
+			l.back()
+			t.Kind = TILDE
+		}
+	case '=':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = EQUAL_EQUAL
+		} else {
+			l.back()
+			t.Kind = EQUAL
+		}
+	case '!':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = BANG_EQ
+		} else {
+			l.back()
+			t.Kind = BANG
+		}
+	case '.':
+		l.step()
+		if l.CodePoint == '.' {
+			t.Kind = DOT_DOT
+		} else {
+			l.back()
+			t.Kind = DOT
+		}
+	case ':':
+		l.step()
+		switch l.CodePoint {
+		case ':':
+			t.Kind = DOUBLE_COLON
+		case '=':
+			t.Kind = WALRUS
+		default:
+			l.back()
+			t.Kind = COLON
+		}
+	case '<':
+		l.step()
+		switch l.CodePoint {
+		case '<':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = LSHIFT_EQ
+			} else {
+				l.back()
+				t.Kind = LEFT_SHIFT
+			}
+		case '=':
+			t.Kind = LESS_EQ
+		default:
+			l.back()
+			t.Kind = LESS
+		}
+	case '>':
+		l.step()
+		switch l.CodePoint {
+		case '>':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = RSHIFT_EQ
+			} else {
+				l.back()
+				t.Kind = RIGHT_SHIFT
+			}
+		case '=':
+			t.Kind = GREATER_EQ
+		default:
+			l.back()
+			t.Kind = GREATER
+		}
 	case '^':
 		t.Kind = CARET
-	case '=':
-		t.Kind = EQUAL
-	case '!':
-		t.Kind = BANG
-	case '<':
-		t.Kind = LESS
-	case '>':
-		t.Kind = GREATER
 	case '?':
 		t.Kind = QUESTION
+	case '(':
+		t.Kind = LEFT_PAREN
+	case ')':
+		t.Kind = RIGHT_PAREN
+	case '[':
+		t.Kind = LEFT_BRACKET
+	case ']':
+		t.Kind = RIGHT_BRACKET
+	case '{':
+		t.Kind = LEFT_BRACE
+	case '}':
+		t.Kind = RIGHT_BRACE
+	case ',':
+		t.Kind = COMMA
+	case ';':
+		t.Kind = SEMICOLON
 	default:
+		// skip whitespaces
+		for isWhitespace(l.CodePoint) {
+			l.step()
+		}
+
+		// identifiers
 		if isIdentStart(l.CodePoint) {
-			// consume identifier
+			l.step()
+			for isIdentContinue(l.CodePoint) {
+				l.step()
+			}
+
+			t.Kind = IDENTIFIER
 		} else {
 			return errInvalidIdentStart
 		}
 	}
 
-	l.Ctoken = t
+	l.Token = t
 	return nil
 }
