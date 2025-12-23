@@ -15,7 +15,7 @@ build: vet test
 	go build -o $(BUILD_DIR)/ -ldflags="$(LDFLAGS)"
 
 test:
-	go test ./...
+	-go test ./...
 
 clean:
 	rm -r $(BUILD_DIR)

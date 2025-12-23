@@ -19,7 +19,7 @@ func TestTokens(t *testing.T) {
 		kind core.Tok
 	}{
 		{"", core.EOF},
-		// {"\x00", core.INVALID},
+		{"\x00", core.INVALID},
 
 		// - Keywords -
 		{"break", core.BREAK},

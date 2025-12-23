@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"strings"
 	"unicode"
 )
 
@@ -14,7 +15,6 @@ const (
 
 var (
 	errUnexpectedUnicodeChar = errors.New("unexpected unicode codepoint")
-	errInvalidIdentStart     = errors.New("invalid start of an identifier name")
 )
 
 type Tok uint8
@@ -102,6 +102,30 @@ const (
 	CHAR
 	STRING
 )
+
+var Keywords = map[string]Tok{
+	"break":     BREAK,
+	"case":      CASE,
+	"const":     CONST,
+	"continue":  CONTINUE,
+	"default":   DEFAULT,
+	"else":      ELSE,
+	"enum":      ENUM,
+	"fn":        FN,
+	"for":       FOR,
+	"import":    IMPORT,
+	"interface": INTERFACE,
+	"if":        IF,
+	"in":        IN,
+	"map":       MAP,
+	"return":    RETURN,
+	"str":       STR,
+	"struct":    STRUCT,
+	"switch":    SWITCH,
+	"type":      TYPE,
+	"var":       VAR,
+	"weak":      WEAK,
+}
 
 func (t Tok) String() string {
 	var s string
@@ -323,6 +347,7 @@ func NewLexer(file io.Reader) *Lexer {
 	}
 }
 
+// Forwards the [Lexer.F] by one rune.
 func (l *Lexer) step() {
 	l.Ppos = l.Pos
 	l.Pcursor = l.Cursor
@@ -346,7 +371,8 @@ func (l *Lexer) step() {
 	l.Cursor += uint32(width)
 }
 
-// Do not call twice without a l.step() in between
+// Back tracks the [Lexer.F] by one rune.
+// Do not call twice without a [Lexer.step] in between.
 func (l *Lexer) back() {
 	if l.CodePoint == eof {
 		return
@@ -359,6 +385,24 @@ func (l *Lexer) back() {
 
 	l.Pos = l.Ppos
 	l.Cursor = l.Pcursor
+}
+
+func (l *Lexer) lexIdent() Tok {
+	name := strings.Builder{}
+
+	for isIdentContinue(l.CodePoint) {
+		_, err := name.WriteRune(l.CodePoint)
+		if err != nil {
+			return INVALID
+		}
+		l.step()
+	}
+
+	if Keywords[name.String()] != 0 {
+		return Keywords[name.String()]
+	}
+
+	return IDENTIFIER
 }
 
 func (l *Lexer) Next() error {
@@ -553,14 +597,7 @@ func (l *Lexer) Next() error {
 
 			// identifiers
 			if isIdentStart(l.CodePoint) {
-				l.step()
-				for isIdentContinue(l.CodePoint) {
-					l.step()
-				}
-
-				t.Kind = IDENTIFIER
-			} else {
-				return errInvalidIdentStart
+				t.Kind = l.lexIdent()
 			}
 		}
 
