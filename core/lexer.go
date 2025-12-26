@@ -14,7 +14,8 @@ const (
 )
 
 var (
-	errUnexpectedUnicodeChar = errors.New("unexpected unicode codepoint")
+	errUnexpectedUnicodeChar  = errors.New("unexpected unicode codepoint")
+	errUnterminatedStrLiteral = errors.New("unterminated string literal")
 )
 
 type Tok uint8
@@ -268,17 +269,17 @@ func (t Tok) String() string {
 	case DOT_DOT:
 		s = ".."
 	case IDENTIFIER:
-		s = "identifier"
+		s = "[identifier]"
 	case INTEGER:
-		s = "integer"
+		s = "[integer]"
 	case REAL:
-		s = "real"
+		s = "[real]"
 	case CHAR:
-		s = "char"
+		s = "[char]"
 	case STRING:
-		s = "string"
+		s = "[string]"
 	default:
-		s = "unknown"
+		s = "[unknown]"
 	}
 
 	return s
@@ -294,10 +295,8 @@ type Position struct {
 }
 
 type Token struct {
-	Offset uint32
-	Start  uint32
-	Width  uint32
-	Kind   Tok
+	Value string
+	Kind  Tok
 }
 
 type Lexer struct {
@@ -352,7 +351,11 @@ func (l *Lexer) step() {
 	l.Ppos = l.Pos
 	l.Pcursor = l.Cursor
 
-	codePoint, width, _ := l.F.ReadRune()
+	codePoint, width, err := l.F.ReadRune()
+	if err != nil && err != io.EOF {
+		panic("hamlet_crash: " + err.Error())
+	}
+
 	if width == 0 {
 		codePoint = eof
 	}
@@ -387,25 +390,49 @@ func (l *Lexer) back() {
 	l.Cursor = l.Pcursor
 }
 
-func (l *Lexer) lexIdent() Tok {
+func (l *Lexer) lexIdent() (string, error) {
 	name := strings.Builder{}
 
 	for isIdentContinue(l.CodePoint) {
 		_, err := name.WriteRune(l.CodePoint)
 		if err != nil {
-			return INVALID
+			return name.String(), err
 		}
 		l.step()
 	}
 
-	if Keywords[name.String()] != 0 {
-		return Keywords[name.String()]
+	return name.String(), nil
+}
+
+func (l *Lexer) lexStr() (string, error) {
+	// skip the starting `"`
+	l.step()
+
+	value := strings.Builder{}
+
+	for l.CodePoint != '"' {
+		if l.CodePoint == eof {
+			return value.String(), errUnterminatedStrLiteral
+		}
+
+		if l.CodePoint == unicode.ReplacementChar {
+			return value.String(), errUnexpectedUnicodeChar
+		}
+
+		_, err := value.WriteRune(l.CodePoint)
+		if err != nil {
+			return value.String(), err
+		}
+		l.step()
 	}
 
-	return IDENTIFIER
+	// skip the ending `"`
+	l.step()
+	return value.String(), nil
 }
 
 func (l *Lexer) Next() error {
+	var e error = nil
 	t := &Token{Kind: INVALID}
 	l.step()
 
@@ -554,11 +581,10 @@ func (l *Lexer) Next() error {
 				t.Kind = GREATER
 			}
 		case '#': // single line comment
-		singleLineComment:
 			for {
 				l.step()
 				if isNewLineTerminator(l.CodePoint) || l.CodePoint == eof {
-					break singleLineComment
+					break
 				}
 			}
 
@@ -583,6 +609,14 @@ func (l *Lexer) Next() error {
 			t.Kind = COMMA
 		case ';':
 			t.Kind = SEMICOLON
+		case '"':
+			v, err := l.lexStr()
+			if err != nil {
+				e = err
+			}
+
+			t.Kind = STRING
+			t.Value = v
 		default:
 			// skip whitespaces
 			if isWhitespace(l.CodePoint) {
@@ -590,18 +624,29 @@ func (l *Lexer) Next() error {
 				continue
 			}
 
-			// invalid unicode codepoint
-			if l.CodePoint == unicode.ReplacementChar {
-				return errUnexpectedUnicodeChar
-			}
-
 			// identifiers
 			if isIdentStart(l.CodePoint) {
-				t.Kind = l.lexIdent()
+				name, err := l.lexIdent()
+				if err != nil {
+					e = err
+				}
+
+				t.Value = name
+				if Keywords[name] != 0 {
+					t.Kind = Keywords[name]
+				} else {
+					t.Kind = IDENTIFIER
+				}
+			}
+
+			// invalid unicode codepoint
+			if l.CodePoint == unicode.ReplacementChar {
+				e = errUnexpectedUnicodeChar
+				l.step()
 			}
 		}
 
 		l.Token = t
-		return nil
+		return e
 	}
 }
