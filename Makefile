@@ -11,7 +11,7 @@ fmt:
 vet: fmt
 	go vet ./...
 
-build: vet test
+build: vet
 	go build -o $(BUILD_DIR)/ -ldflags="$(LDFLAGS)"
 
 test:

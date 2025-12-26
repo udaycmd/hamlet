@@ -14,8 +14,11 @@ const (
 )
 
 var (
-	errUnexpectedUnicodeChar  = errors.New("unexpected unicode codepoint")
-	errUnterminatedStrLiteral = errors.New("unterminated string literal")
+	errUnexpectedUnicodeChar   = errors.New("unexpected unicode codepoint")
+	errUnterminatedStrLiteral  = errors.New("unterminated string literal")
+	errUnterminatedCharLiteral = errors.New("unterminated character literal")
+	errEmptyCharLiteral        = errors.New("zero width character literal encountered")
+	errCharLiteralTooWide      = errors.New("character literal too wide")
 )
 
 type Tok uint8
@@ -431,6 +434,43 @@ func (l *Lexer) lexStr() (string, error) {
 	return value.String(), nil
 }
 
+func (l *Lexer) lexChar() (string, error) {
+	// skip the starting `'`
+	l.step()
+
+	value := strings.Builder{}
+	charCount := 0
+	for l.CodePoint != '\'' {
+		if l.CodePoint == eof {
+			return value.String(), errUnterminatedCharLiteral
+		}
+
+		if l.CodePoint == unicode.ReplacementChar {
+			return value.String(), errUnexpectedUnicodeChar
+		}
+
+		_, err := value.WriteRune(l.CodePoint)
+		if err != nil {
+			return value.String(), err
+		}
+
+		charCount += 1
+		l.step()
+	}
+
+	if charCount == 0 {
+		return value.String(), errEmptyCharLiteral
+	}
+
+	if charCount > 1 {
+		return value.String(), errCharLiteralTooWide
+	}
+
+	// skip the ending `'`
+	l.step()
+	return value.String(), nil
+}
+
 func (l *Lexer) Next() error {
 	var e error = nil
 	t := &Token{Kind: INVALID}
@@ -616,6 +656,14 @@ func (l *Lexer) Next() error {
 			}
 
 			t.Kind = STRING
+			t.Value = v
+		case '\'':
+			v, err := l.lexChar()
+			if err != nil {
+				e = err
+			}
+
+			t.Kind = CHAR
 			t.Value = v
 		default:
 			// skip whitespaces

@@ -90,7 +90,11 @@ func TestTokens(t *testing.T) {
 		{"::", DOUBLE_COLON},
 		{".", DOT},
 		{"..", DOT_DOT},
-		{"\"hello, \nWorld\"", STRING},
+
+		// - Literals -
+		{"Hamlet", IDENTIFIER},
+		{"\"Hamlet, World\"", STRING},
+		{"'H'", CHAR},
 	}
 
 	for _, exp := range expected {
