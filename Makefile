@@ -12,7 +12,7 @@ vet: fmt
 	go vet ./...
 
 build: vet
-	go build -o $(BUILD_DIR)/ -ldflags="$(LDFLAGS)"
+	go build -o $(BUILD_DIR)/hamlet -ldflags="$(LDFLAGS)" ./src
 
 test:
 	-go test ./...

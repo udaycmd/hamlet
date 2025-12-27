@@ -1,8 +1,14 @@
-package core
+// Copyright 2025 Uday Tiwari. All rights reserved.
+// Use of this source code is governed by MIT
+// license that can be found in the LICENSE file.
+
+package frontend_test
 
 import (
 	"strings"
 	"testing"
+
+	. "github.com/udaycmd/hamlet/src/frontend"
 )
 
 func lexToken(content string) *Token {
@@ -17,7 +23,7 @@ func TestTokens(t *testing.T) {
 		kind Tok
 	}{
 		{"", EOF},
-		{"\x00", INVALID},
+		{"\uFFFD", INVALID},
 
 		// - Keywords -
 		{"break", BREAK},
@@ -93,8 +99,10 @@ func TestTokens(t *testing.T) {
 
 		// - Literals -
 		{"Hamlet", IDENTIFIER},
-		{"\"Hamlet, World\"", STRING},
+		{"\"Hamlet\"", STRING},
 		{"'H'", CHAR},
+		{"69", INTEGER},
+		{"69.42", REAL},
 	}
 
 	for _, exp := range expected {
