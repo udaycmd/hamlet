@@ -18,11 +18,14 @@ const (
 )
 
 var (
-	errUnexpectedUnicodeChar   = errors.New("unexpected unicode codepoint")
-	errUnterminatedStrLiteral  = errors.New("unterminated string literal")
-	errUnterminatedCharLiteral = errors.New("unterminated character literal")
-	errEmptyCharLiteral        = errors.New("zero width character literal encountered")
-	errCharLiteralTooWide      = errors.New("character literal too wide")
+	errUnexpectedUnicodeChar    = errors.New("unexpected unicode codepoint")
+	errUnterminatedStrLiteral   = errors.New("unterminated string literal")
+	errUnterminatedCharLiteral  = errors.New("unterminated character literal")
+	errEmptyCharLiteral         = errors.New("zero width character literal encountered")
+	errCharLiteralTooWide       = errors.New("character literal too wide")
+	errNoDigitsAfterBasePrefix  = errors.New("expected digit(s) after base prefix")
+	errNoDigitAfterDecimalPoint = errors.New("expected digit(s) after decimal point")
+	errNoDigitAfterExponent     = errors.New("expected digit(s) after exponent")
 )
 
 type Tok uint8
@@ -497,26 +500,110 @@ func (l *Lexer) lexChar() (string, error) {
 	return value.String(), nil
 }
 
-func (l *Lexer) lexNum() {
-	var base Radix = base10
+func (l *Lexer) lexDigitSeq(sb *strings.Builder, base Radix) error {
+	for isDigit(l.CodePoint, base) || l.CodePoint == '_' {
+		_, err := sb.WriteRune(l.CodePoint)
+		if err != nil {
+			return err
+		}
+		l.step()
+	}
+
+	return nil
+}
+
+func (l *Lexer) lexNum() (string, Tok, error) {
+	value := strings.Builder{}
+	base := base10
+	isReal := false
 
 	if l.CodePoint == '0' {
-		l.step()
-		if l.CodePoint == 'x' || l.CodePoint == 'X' {
-			l.step()
-			base = base16
-		} else {
-			l.back()
+		_, err := value.WriteRune(l.CodePoint)
+		if err != nil {
+			return value.String(), INVALID, err
 		}
+
+		l.step()
+		nbase := base10
+		switch l.CodePoint {
+		case 'x', 'X':
+			nbase = base16
+		case 'o', 'O':
+			nbase = base8
+		case 'b', 'B':
+			nbase = base2
+		}
+
+		if nbase != base10 {
+			base = nbase
+			_, err := value.WriteRune(l.CodePoint)
+			if err != nil {
+				return value.String(), INVALID, err
+			}
+
+			l.step()
+			if !isDigit(l.CodePoint, base) {
+				return value.String(), INVALID, errNoDigitsAfterBasePrefix
+			}
+		}
+	}
+
+	l.lexDigitSeq(&value, base)
+
+	if base != base10 {
+		return value.String(), INTEGER, nil
 	}
 
 	if l.CodePoint == '.' {
 		l.step()
-		if !isDigit(l.CodePoint, base) {
+
+		// found `..` (range) operator
+		if l.CodePoint == '.' {
 			l.back()
-			return
+			return value.String(), INTEGER, nil
 		}
+
+		isReal = true
+		_, err := value.WriteRune('.')
+		if err != nil {
+			return value.String(), INVALID, err
+		}
+
+		if !isDigit(l.CodePoint, base10) {
+			return value.String(), INVALID, errNoDigitAfterDecimalPoint
+		}
+
+		l.lexDigitSeq(&value, base10)
 	}
+
+	if l.CodePoint == 'e' || l.CodePoint == 'E' {
+		isReal = true
+		_, err := value.WriteRune(l.CodePoint)
+		if err != nil {
+			return value.String(), INVALID, err
+		}
+
+		l.step()
+		if l.CodePoint == '+' || l.CodePoint == '-' {
+			_, err := value.WriteRune(l.CodePoint)
+			if err != nil {
+				return value.String(), INVALID, err
+			}
+			l.step()
+		}
+
+		if !isDigit(l.CodePoint, base10) {
+			return value.String(), INVALID, errNoDigitAfterExponent
+		}
+
+		l.lexDigitSeq(&value, base10)
+	}
+
+	if isReal {
+		return value.String(), REAL, nil
+	}
+
+	return value.String(), INTEGER, nil
 }
 
 func (l *Lexer) Next() {
@@ -528,38 +615,22 @@ func (l *Lexer) Next() {
 		switch l.CodePoint {
 		case eof:
 			t.Kind = EOF
-		// case '+':
-		// 	l.step()
-		// 	if l.CodePoint == '=' {
-		// 		t.Kind = PLUS_EQ
-		// 	} else if isDigit(l.CodePoint) {
-		// 		v, kind, err := l.lexDigits()
-		// 		if err != nil {
-		// 			e = err
-		// 		}
-
-		// 		t.Kind = kind
-		// 		t.Value = v
-		// 	} else {
-		// 		l.back()
-		// 		t.Kind = PLUS
-		// 	}
-		// case '-':
-		// 	l.step()
-		// 	if l.CodePoint == '=' {
-		// 		t.Kind = MINUS_EQ
-		// 	} else if isDigit(l.CodePoint) {
-		// 		v, kind, err := l.lexDigits()
-		// 		if err != nil {
-		// 			e = err
-		// 		}
-
-		// 		t.Kind = kind
-		// 		t.Value = v
-		// 	} else {
-		// 		l.back()
-		// 		t.Kind = MINUS
-		// 	}
+		case '+':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = PLUS_EQ
+			} else {
+				l.back()
+				t.Kind = PLUS
+			}
+		case '-':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = MINUS_EQ
+			} else {
+				l.back()
+				t.Kind = MINUS
+			}
 		case '*':
 			l.step()
 			if l.CodePoint == '=' {
@@ -729,23 +800,20 @@ func (l *Lexer) Next() {
 
 			t.Kind = CHAR
 			t.Value = v
-		// case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		// 	v, kind, err := l.lexDigits()
-		// 	if err != nil {
-		// 		e = err
-		// 	}
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			v, kind, err := l.lexNum()
+			if err != nil {
+				e = err
+			}
 
-		// 	t.Kind = kind
-		// 	t.Value = v
+			t.Kind = kind
+			t.Value = v
 		default:
-			// skip whitespaces
+			// skip whitespaces and new lines
 			if isWhitespace(l.CodePoint) {
 				l.step()
 				continue
-			}
-
-			// identifiers
-			if isIdentStart(l.CodePoint) {
+			} else if isIdentStart(l.CodePoint) { // identifiers
 				name, err := l.lexIdent()
 				if err != nil {
 					e = err
@@ -757,10 +825,7 @@ func (l *Lexer) Next() {
 				} else {
 					t.Kind = IDENTIFIER
 				}
-			}
-
-			// invalid unicode codepoint
-			if l.CodePoint == unicode.ReplacementChar {
+			} else if l.CodePoint == unicode.ReplacementChar { // invalid unicode codepoint
 				e = errUnexpectedUnicodeChar
 				l.step()
 			}
@@ -768,5 +833,6 @@ func (l *Lexer) Next() {
 
 		l.Token = t
 		l.Error = e
+		return
 	}
 }

@@ -17,33 +17,60 @@ const (
 	Yellow = "\033[33m"
 )
 
+var (
+	flags = flag.FlagSet{}
+)
+
 func Colorize(text, color string) string {
 	return color + text + Reset
 }
 
-func help(w io.Writer) {
+func printVersion(w io.Writer) {
 	fmt.Fprintln(w, "Hamlet", Colorize(HamletVersion, Yellow))
+}
+
+func help(w io.Writer) {
+	flags.SetOutput(w)
+
+	printVersion(w)
 	fmt.Fprintln(w, "Copyright (C) 2025 Uday Tiwari")
 	fmt.Fprintln(w, "Usage: hamlet [options] ... [file] [fileargs] ...")
 	fmt.Fprintln(w, "Options:")
-	fmt.Fprintln(w, "-version:		print the Hamlet version number and exit")
-	fmt.Fprintln(w, "-nocheck:		disable typechecking")
+	flags.PrintDefaults()
 }
 
-func hamlet_main() error {
-	v := flag.Bool("version", false, "print the Hamlet version number and exit")
-	flag.Parse()
+func hamlet_main(args []string) error {
+	v := flags.Bool("version", false, "print the Hamlet version number and exit")
+	nc := flags.Bool("nocheck", false, "disable typechecking")
+	h := flags.Bool("help", false, "print help")
+
+	flags.SetOutput(io.Discard)
+	err := flags.Parse(args)
+
+	if err != nil {
+		if err == flag.ErrHelp {
+			help(os.Stdout)
+		}
+		return err
+	}
+
+	if *h {
+		help(os.Stdout)
+		return nil
+	}
 
 	if *v {
-		help(os.Stdout)
+		printVersion(os.Stdout)
+	}
+
+	if *nc {
 	}
 
 	return nil
 }
 
 func main() {
-	if status := hamlet_main(); status != nil {
-		help(os.Stderr)
+	if status := hamlet_main(os.Args[1:]); status != nil {
 		fmt.Fprintf(os.Stderr, "%s: %s\n", Colorize("Error", Red), status.Error())
 		os.Exit(1)
 	}
