@@ -26,7 +26,7 @@ func Colorize(text, color string) string {
 }
 
 func printVersion(w io.Writer) {
-	fmt.Fprintln(w, "Hamlet", Colorize(HamletVersion, Yellow))
+	fmt.Fprintln(w, "Hamlet Interpreter", Colorize(HamletVersion, Yellow))
 }
 
 func help(w io.Writer) {
@@ -34,7 +34,7 @@ func help(w io.Writer) {
 
 	printVersion(w)
 	fmt.Fprintln(w, "Copyright (C) 2025 Uday Tiwari")
-	fmt.Fprintln(w, "Usage: hamlet [options] ... [file] [fileargs] ...")
+	fmt.Fprintln(w, "Usage: hamlet [option] ... [file] [filearg] ...")
 	fmt.Fprintln(w, "Options:")
 	flags.PrintDefaults()
 }

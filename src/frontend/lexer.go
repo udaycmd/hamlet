@@ -512,6 +512,10 @@ func (l *Lexer) lexDigitSeq(sb *strings.Builder, base Radix) error {
 	return nil
 }
 
+// Parse a number (int or real) and return it as string or a parse error.
+// Referenced from [umka-lang].
+//
+// [umka-lang]: https://github.com/vtereshkov/umka-lang.git
 func (l *Lexer) lexNum() (string, Tok, error) {
 	value := strings.Builder{}
 	base := base10
