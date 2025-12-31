@@ -4,6 +4,17 @@
 
 package frontend
 
-type Parser interface {
-	Parse() []any
+import (
+	"io"
+)
+
+type parser struct {
+	lexer  Lexer
+	Errors []Error
+}
+
+func NewParser(source io.Reader) *parser {
+	return &parser{
+		lexer: NewLexer(source),
+	}
 }

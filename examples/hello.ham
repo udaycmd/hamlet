@@ -1,0 +1,4 @@
+
+fn main() -> Void {
+    @echo "Hello, World";
+}

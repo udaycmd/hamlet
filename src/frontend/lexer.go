@@ -6,7 +6,6 @@ package frontend
 
 import (
 	"bufio"
-	"errors"
 	"io"
 	"strings"
 	"unicode"
@@ -18,18 +17,40 @@ const (
 )
 
 var (
-	errUnexpectedUnicodeChar    = errors.New("unexpected unicode codepoint")
-	errUnterminatedStrLiteral   = errors.New("unterminated string literal")
-	errUnterminatedCharLiteral  = errors.New("unterminated character literal")
-	errEmptyCharLiteral         = errors.New("zero width character literal encountered")
-	errCharLiteralTooWide       = errors.New("character literal too wide")
-	errNoDigitsAfterBasePrefix  = errors.New("expected digit(s) after base prefix")
-	errNoDigitAfterDecimalPoint = errors.New("expected digit(s) after decimal point")
-	errNoDigitAfterExponent     = errors.New("expected digit(s) after exponent")
+	ErrUnexpectedUnicodeChar    = "unexpected unicode codepoint"
+	ErrUnterminatedStrLiteral   = "unterminated string literal"
+	ErrUnterminatedCharLiteral  = "unterminated character literal"
+	ErrEmptyCharLiteral         = "zero width character literal encountered"
+	ErrCharLiteralTooWide       = "character literal too wide"
+	ErrNoDigitsAfterBasePrefix  = "expected digit(s) after base prefix"
+	ErrNoDigitAfterDecimalPoint = "expected digit(s) after decimal point"
+	ErrNoDigitAfterExponent     = "expected digit(s) after exponent"
 )
 
-type Tok uint8
-type Radix uint8
+type (
+	Tok   uint8
+	Radix uint8
+
+	Position struct {
+		Line   uint32
+		Column uint32
+	}
+
+	Token struct {
+		Value string
+		Kind  Tok
+		Pos   Position
+	}
+
+	Lexer struct {
+		F                  *bufio.Reader
+		Pos                Position
+		Token, PrevToken   *Token
+		Cursor, PrevCursor uint32
+		Err                Error
+		CodePoint          rune
+	}
+)
 
 const (
 	base2 Radix = iota
@@ -45,7 +66,6 @@ const (
 	// - Keywords -
 	BREAK
 	CASE
-	CONST
 	CONTINUE
 	DEFAULT
 	ELSE
@@ -53,19 +73,19 @@ const (
 	FN
 	FOR
 	IMPORT
+	EXPORT
 	INTERFACE
 	IF
 	IN
 	MAP
 	RETURN
-	STR
 	STRUCT
 	SWITCH
 	TYPE
 	VAR
-	WEAK
 
 	// - Operators -
+	ARROW
 	PLUS
 	MINUS
 	STAR
@@ -125,7 +145,6 @@ const (
 var Keywords = map[string]Tok{
 	"break":     BREAK,
 	"case":      CASE,
-	"const":     CONST,
 	"continue":  CONTINUE,
 	"default":   DEFAULT,
 	"else":      ELSE,
@@ -133,17 +152,16 @@ var Keywords = map[string]Tok{
 	"fn":        FN,
 	"for":       FOR,
 	"import":    IMPORT,
+	"export":    EXPORT,
 	"interface": INTERFACE,
 	"if":        IF,
 	"in":        IN,
 	"map":       MAP,
 	"return":    RETURN,
-	"str":       STR,
 	"struct":    STRUCT,
 	"switch":    SWITCH,
 	"type":      TYPE,
 	"var":       VAR,
-	"weak":      WEAK,
 }
 
 func (t Tok) String() string {
@@ -158,8 +176,6 @@ func (t Tok) String() string {
 		s = "break"
 	case CASE:
 		s = "case"
-	case CONST:
-		s = "const"
 	case CONTINUE:
 		s = "continue"
 	case DEFAULT:
@@ -174,6 +190,8 @@ func (t Tok) String() string {
 		s = "for"
 	case IMPORT:
 		s = "import"
+	case EXPORT:
+		s = "export"
 	case INTERFACE:
 		s = "interface"
 	case IF:
@@ -184,8 +202,6 @@ func (t Tok) String() string {
 		s = "map"
 	case RETURN:
 		s = "return"
-	case STR:
-		s = "str"
 	case STRUCT:
 		s = "struct"
 	case SWITCH:
@@ -194,8 +210,8 @@ func (t Tok) String() string {
 		s = "type"
 	case VAR:
 		s = "var"
-	case WEAK:
-		s = "weak"
+	case ARROW:
+		s = "->"
 	case PLUS:
 		s = "+"
 	case MINUS:
@@ -307,27 +323,6 @@ func (t Tok) IsNumber() bool {
 	return t == INTEGER || t == REAL
 }
 
-type Position struct {
-	Line   uint32
-	Column uint32
-}
-
-type Token struct {
-	Value string
-	Kind  Tok
-}
-
-type Lexer struct {
-	F         *bufio.Reader
-	Pos       *Position
-	Ppos      *Position
-	Token     *Token
-	Cursor    uint32
-	Pcursor   uint32
-	Error     error
-	CodePoint rune
-}
-
 func isNewLineTerminator(r rune) bool {
 	switch r {
 	case '\u2028', '\u2029', '\n':
@@ -368,18 +363,19 @@ func isIdentContinue(r rune) bool {
 	return isIdentStart(r) || isDigit(r, base10)
 }
 
-func NewLexer(file io.Reader) *Lexer {
-	return &Lexer{
-		F:    bufio.NewReaderSize(file, maxLexBufSize),
-		Pos:  &Position{Line: 1, Column: 1},
-		Ppos: &Position{Line: 1, Column: 1},
+func NewLexer(file io.Reader) Lexer {
+	return Lexer{
+		F:         bufio.NewReaderSize(file, maxLexBufSize),
+		Pos:       Position{Line: 1, Column: 1},
+		Token:     &Token{Kind: INVALID},
+		PrevToken: &Token{Kind: INVALID},
 	}
 }
 
 // Forwards the [Lexer.F] by one rune.
 func (l *Lexer) step() {
-	l.Ppos = l.Pos
-	l.Pcursor = l.Cursor
+	l.PrevCursor = l.Cursor
+	l.PrevToken = l.Token
 
 	codePoint, width, err := l.F.ReadRune()
 	if err != nil && err != io.EOF {
@@ -416,107 +412,109 @@ func (l *Lexer) back() {
 		panic("hamlet_crash: " + err.Error())
 	}
 
-	l.Pos = l.Ppos
-	l.Cursor = l.Pcursor
+	l.Pos = l.PrevToken.Pos
+	l.Cursor = l.PrevCursor
 }
 
-func (l *Lexer) lexIdent() (string, error) {
+func (l *Lexer) lexIdent() (string, string) {
 	name := strings.Builder{}
 
 	for isIdentContinue(l.CodePoint) {
 		_, err := name.WriteRune(l.CodePoint)
 		if err != nil {
-			return name.String(), err
+			return name.String(), err.Error()
 		}
 		l.step()
 	}
 
-	return name.String(), nil
+	return name.String(), ""
 }
 
 // [Lexer.lexStr] only identifies any lexical error while scanning a string literal.
 // It does not do any kind of string validation and parsing.
-func (l *Lexer) lexStr() (string, error) {
+func (l *Lexer) lexStr() (string, string) {
 	// skip the starting `"`
 	l.step()
+
+	// skip the ending `"`
+	defer l.step()
 
 	value := strings.Builder{}
 
 	for l.CodePoint != '"' {
 		if l.CodePoint == eof {
-			return value.String(), errUnterminatedStrLiteral
+			return value.String(), ErrUnterminatedStrLiteral
 		}
 
 		if l.CodePoint == unicode.ReplacementChar {
-			return value.String(), errUnexpectedUnicodeChar
+			return value.String(), ErrUnexpectedUnicodeChar
 		}
 
 		_, err := value.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), err
+			return value.String(), err.Error()
 		}
 		l.step()
 	}
 
-	// skip the ending `"`
-	l.step()
-	return value.String(), nil
+	return value.String(), ""
 }
 
-func (l *Lexer) lexChar() (string, error) {
+func (l *Lexer) lexChar() (string, string) {
 	// skip the starting `'`
 	l.step()
+
+	// skip the ending `'`
+	defer l.step()
 
 	value := strings.Builder{}
 	charCount := 0
 	for l.CodePoint != '\'' {
 		if l.CodePoint == eof {
-			return value.String(), errUnterminatedCharLiteral
+			return value.String(), ErrUnterminatedCharLiteral
 		}
 
 		if l.CodePoint == unicode.ReplacementChar {
-			return value.String(), errUnexpectedUnicodeChar
+			return value.String(), ErrUnexpectedUnicodeChar
 		}
 
 		_, err := value.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), err
+			return value.String(), err.Error()
 		}
 
-		charCount += 1
+		charCount++
 		l.step()
 	}
 
-	if charCount == 0 {
-		return value.String(), errEmptyCharLiteral
+	if value.Len() == 0 {
+		return value.String(), ErrEmptyCharLiteral
 	}
 
-	if charCount > 1 {
-		return value.String(), errCharLiteralTooWide
+	if !(value.Len() <= 4 && charCount == 1) {
+		return value.String(), ErrCharLiteralTooWide
 	}
 
-	// skip the ending `'`
-	l.step()
-	return value.String(), nil
+	return value.String(), ""
 }
 
-func (l *Lexer) lexDigitSeq(sb *strings.Builder, base Radix) error {
+func (l *Lexer) lexDigitSeq(sb *strings.Builder, base Radix) string {
 	for isDigit(l.CodePoint, base) || l.CodePoint == '_' {
 		_, err := sb.WriteRune(l.CodePoint)
 		if err != nil {
-			return err
+			return err.Error()
 		}
 		l.step()
 	}
 
-	return nil
+	return ""
 }
 
 // Parse a number (int or real) and return it as string or a parse error.
 // Referenced from [umka-lang].
 //
 // [umka-lang]: https://github.com/vtereshkov/umka-lang.git
-func (l *Lexer) lexNum() (string, Tok, error) {
+func (l *Lexer) lexNum() (string, Tok, string) {
 	value := strings.Builder{}
 	base := base10
 	isReal := false
@@ -524,7 +522,7 @@ func (l *Lexer) lexNum() (string, Tok, error) {
 	if l.CodePoint == '0' {
 		_, err := value.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), INVALID, err
+			return value.String(), INVALID, err.Error()
 		}
 
 		l.step()
@@ -542,12 +540,12 @@ func (l *Lexer) lexNum() (string, Tok, error) {
 			base = nbase
 			_, err := value.WriteRune(l.CodePoint)
 			if err != nil {
-				return value.String(), INVALID, err
+				return value.String(), INVALID, err.Error()
 			}
 
 			l.step()
 			if !isDigit(l.CodePoint, base) {
-				return value.String(), INVALID, errNoDigitsAfterBasePrefix
+				return value.String(), INVALID, ErrNoDigitsAfterBasePrefix
 			}
 		}
 	}
@@ -555,7 +553,7 @@ func (l *Lexer) lexNum() (string, Tok, error) {
 	l.lexDigitSeq(&value, base)
 
 	if base != base10 {
-		return value.String(), INTEGER, nil
+		return value.String(), INTEGER, ""
 	}
 
 	if l.CodePoint == '.' {
@@ -564,17 +562,17 @@ func (l *Lexer) lexNum() (string, Tok, error) {
 		// found `..` (range) operator
 		if l.CodePoint == '.' {
 			l.back()
-			return value.String(), INTEGER, nil
+			return value.String(), INTEGER, ""
 		}
 
 		isReal = true
 		_, err := value.WriteRune('.')
 		if err != nil {
-			return value.String(), INVALID, err
+			return value.String(), INVALID, ""
 		}
 
 		if !isDigit(l.CodePoint, base10) {
-			return value.String(), INVALID, errNoDigitAfterDecimalPoint
+			return value.String(), INVALID, ErrNoDigitAfterDecimalPoint
 		}
 
 		l.lexDigitSeq(&value, base10)
@@ -584,259 +582,263 @@ func (l *Lexer) lexNum() (string, Tok, error) {
 		isReal = true
 		_, err := value.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), INVALID, err
+			return value.String(), INVALID, ""
 		}
 
 		l.step()
 		if l.CodePoint == '+' || l.CodePoint == '-' {
 			_, err := value.WriteRune(l.CodePoint)
 			if err != nil {
-				return value.String(), INVALID, err
+				return value.String(), INVALID, ""
 			}
 			l.step()
 		}
 
 		if !isDigit(l.CodePoint, base10) {
-			return value.String(), INVALID, errNoDigitAfterExponent
+			return value.String(), INVALID, ErrNoDigitAfterExponent
 		}
 
 		l.lexDigitSeq(&value, base10)
 	}
 
 	if isReal {
-		return value.String(), REAL, nil
+		return value.String(), REAL, ""
 	}
 
-	return value.String(), INTEGER, nil
+	return value.String(), INTEGER, ""
 }
 
-func (l *Lexer) Next() {
-	var e error = nil
-	t := &Token{Kind: INVALID}
+func (l *Lexer) lexWhiteSpaceAndComment() {
 	l.step()
 
-	for {
-		switch l.CodePoint {
-		case eof:
-			t.Kind = EOF
-		case '+':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = PLUS_EQ
-			} else {
-				l.back()
-				t.Kind = PLUS
-			}
-		case '-':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = MINUS_EQ
-			} else {
-				l.back()
-				t.Kind = MINUS
-			}
-		case '*':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = STAR_EQ
-			} else {
-				l.back()
-				t.Kind = STAR
-			}
-		case '/':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = SLASH_EQ
-			} else {
-				l.back()
-				t.Kind = SLASH
-			}
-		case '%':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = PERCENT_EQ
-			} else {
-				l.back()
-				t.Kind = PERCENT
-			}
-		case '&':
-			l.step()
-			switch l.CodePoint {
-			case '=':
-				t.Kind = AND_EQ
-			case '&':
-				t.Kind = AND
-			default:
-				l.back()
-				t.Kind = AMPERSAND
-			}
-		case '|':
-			l.step()
-			switch l.CodePoint {
-			case '=':
-				t.Kind = OR_EQ
-			case '|':
-				t.Kind = OR
-			default:
-				l.back()
-				t.Kind = PIPE
-			}
-		case '~':
-			l.step()
-			switch l.CodePoint {
-			case '=':
-				t.Kind = NOT_EQ_BIT
-			default:
-				l.back()
-				t.Kind = TILDE
-			}
-		case '=':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = EQUAL_EQUAL
-			} else {
-				l.back()
-				t.Kind = EQUAL
-			}
-		case '!':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = BANG_EQ
-			} else {
-				l.back()
-				t.Kind = BANG
-			}
-		case '.':
-			l.step()
-			if l.CodePoint == '.' {
-				t.Kind = DOT_DOT
-			} else {
-				l.back()
-				t.Kind = DOT
-			}
-		case ':':
-			l.step()
-			switch l.CodePoint {
-			case ':':
-				t.Kind = DOUBLE_COLON
-			case '=':
-				t.Kind = WALRUS
-			default:
-				l.back()
-				t.Kind = COLON
-			}
-		case '<':
-			l.step()
-			switch l.CodePoint {
-			case '<':
-				l.step()
-				if l.CodePoint == '=' {
-					t.Kind = LSHIFT_EQ
-				} else {
-					l.back()
-					t.Kind = LEFT_SHIFT
-				}
-			case '=':
-				t.Kind = LESS_EQ
-			default:
-				l.back()
-				t.Kind = LESS
-			}
-		case '>':
-			l.step()
-			switch l.CodePoint {
-			case '>':
-				l.step()
-				if l.CodePoint == '=' {
-					t.Kind = RSHIFT_EQ
-				} else {
-					l.back()
-					t.Kind = RIGHT_SHIFT
-				}
-			case '=':
-				t.Kind = GREATER_EQ
-			default:
-				l.back()
-				t.Kind = GREATER
-			}
-		case '#': // single line comment
+	for isWhitespace(l.CodePoint) || l.CodePoint == '#' {
+		if l.CodePoint == '#' {
 			for {
 				l.step()
 				if isNewLineTerminator(l.CodePoint) || l.CodePoint == eof {
 					break
 				}
 			}
-
-			continue
-		case '^':
-			t.Kind = CARET
-		case '?':
-			t.Kind = QUESTION
-		case '(':
-			t.Kind = LEFT_PAREN
-		case ')':
-			t.Kind = RIGHT_PAREN
-		case '[':
-			t.Kind = LEFT_BRACKET
-		case ']':
-			t.Kind = RIGHT_BRACKET
-		case '{':
-			t.Kind = LEFT_BRACE
-		case '}':
-			t.Kind = RIGHT_BRACE
-		case ',':
-			t.Kind = COMMA
-		case ';':
-			t.Kind = SEMICOLON
-		case '"':
-			v, err := l.lexStr()
-			if err != nil {
-				e = err
-			}
-
-			t.Kind = STRING
-			t.Value = v
-		case '\'':
-			v, err := l.lexChar()
-			if err != nil {
-				e = err
-			}
-
-			t.Kind = CHAR
-			t.Value = v
-		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-			v, kind, err := l.lexNum()
-			if err != nil {
-				e = err
-			}
-
-			t.Kind = kind
-			t.Value = v
-		default:
-			// skip whitespaces and new lines
-			if isWhitespace(l.CodePoint) {
-				l.step()
-				continue
-			} else if isIdentStart(l.CodePoint) { // identifiers
-				name, err := l.lexIdent()
-				if err != nil {
-					e = err
-				}
-
-				t.Value = name
-				if Keywords[name] != 0 {
-					t.Kind = Keywords[name]
-				} else {
-					t.Kind = IDENTIFIER
-				}
-			} else if l.CodePoint == unicode.ReplacementChar { // invalid unicode codepoint
-				e = errUnexpectedUnicodeChar
-				l.step()
-			}
 		}
 
-		l.Token = t
-		l.Error = e
-		return
+		l.step()
 	}
+}
+
+func (l *Lexer) Next() {
+	t := &Token{Kind: INVALID}
+
+	// skip whitespaces and new lines
+	l.lexWhiteSpaceAndComment()
+
+	switch l.CodePoint {
+	case eof:
+		t.Kind = EOF
+	case '+':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = PLUS_EQ
+		} else {
+			l.back()
+			t.Kind = PLUS
+		}
+	case '-':
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = MINUS_EQ
+		case '>':
+			t.Kind = ARROW
+		default:
+			l.back()
+			t.Kind = MINUS
+		}
+	case '*':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = STAR_EQ
+		} else {
+			l.back()
+			t.Kind = STAR
+		}
+	case '/':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = SLASH_EQ
+		} else {
+			l.back()
+			t.Kind = SLASH
+		}
+	case '%':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = PERCENT_EQ
+		} else {
+			l.back()
+			t.Kind = PERCENT
+		}
+	case '&':
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = AND_EQ
+		case '&':
+			t.Kind = AND
+		default:
+			l.back()
+			t.Kind = AMPERSAND
+		}
+	case '|':
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = OR_EQ
+		case '|':
+			t.Kind = OR
+		default:
+			l.back()
+			t.Kind = PIPE
+		}
+	case '~':
+		l.step()
+		switch l.CodePoint {
+		case '=':
+			t.Kind = NOT_EQ_BIT
+		default:
+			l.back()
+			t.Kind = TILDE
+		}
+	case '=':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = EQUAL_EQUAL
+		} else {
+			l.back()
+			t.Kind = EQUAL
+		}
+	case '!':
+		l.step()
+		if l.CodePoint == '=' {
+			t.Kind = BANG_EQ
+		} else {
+			l.back()
+			t.Kind = BANG
+		}
+	case '.':
+		l.step()
+		if l.CodePoint == '.' {
+			t.Kind = DOT_DOT
+		} else {
+			l.back()
+			t.Kind = DOT
+		}
+	case ':':
+		l.step()
+		switch l.CodePoint {
+		case ':':
+			t.Kind = DOUBLE_COLON
+		case '=':
+			t.Kind = WALRUS
+		default:
+			l.back()
+			t.Kind = COLON
+		}
+	case '<':
+		l.step()
+		switch l.CodePoint {
+		case '<':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = LSHIFT_EQ
+			} else {
+				l.back()
+				t.Kind = LEFT_SHIFT
+			}
+		case '=':
+			t.Kind = LESS_EQ
+		default:
+			l.back()
+			t.Kind = LESS
+		}
+	case '>':
+		l.step()
+		switch l.CodePoint {
+		case '>':
+			l.step()
+			if l.CodePoint == '=' {
+				t.Kind = RSHIFT_EQ
+			} else {
+				l.back()
+				t.Kind = RIGHT_SHIFT
+			}
+		case '=':
+			t.Kind = GREATER_EQ
+		default:
+			l.back()
+			t.Kind = GREATER
+		}
+	case '^':
+		t.Kind = CARET
+	case '?':
+		t.Kind = QUESTION
+	case '(':
+		t.Kind = LEFT_PAREN
+	case ')':
+		t.Kind = RIGHT_PAREN
+	case '[':
+		t.Kind = LEFT_BRACKET
+	case ']':
+		t.Kind = RIGHT_BRACKET
+	case '{':
+		t.Kind = LEFT_BRACE
+	case '}':
+		t.Kind = RIGHT_BRACE
+	case ',':
+		t.Kind = COMMA
+	case ';':
+		t.Kind = SEMICOLON
+	case '"':
+		v, err := l.lexStr()
+		if err != "" {
+			l.Err.Msg = err
+		}
+
+		t.Kind = STRING
+		t.Value = v
+	case '\'':
+		v, err := l.lexChar()
+		if err != "" {
+			l.Err.Msg = err
+		}
+
+		t.Kind = CHAR
+		t.Value = v
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		v, kind, err := l.lexNum()
+		if err != "" {
+			l.Err.Msg = err
+		}
+
+		t.Kind = kind
+		t.Value = v
+	default:
+		if isIdentStart(l.CodePoint) { // identifiers
+			name, err := l.lexIdent()
+			if err != "" {
+				l.Err.Msg = err
+			}
+
+			t.Value = name
+			if Keywords[name] != 0 {
+				t.Kind = Keywords[name]
+			} else {
+				t.Kind = IDENTIFIER
+			}
+		} else if l.CodePoint == unicode.ReplacementChar { // invalid unicode codepoint
+			l.Err.Msg = ErrUnexpectedUnicodeChar
+			l.step()
+		}
+	}
+
+	l.Token = t
 }

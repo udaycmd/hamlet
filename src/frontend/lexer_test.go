@@ -11,10 +11,10 @@ import (
 	. "github.com/udaycmd/hamlet/src/frontend"
 )
 
-func lexToken(content string) *Token {
+func lexToken(content string) Lexer {
 	lexer := NewLexer(strings.NewReader(content))
 	lexer.Next()
-	return lexer.Token
+	return lexer
 }
 
 func TestTokens(t *testing.T) {
@@ -28,7 +28,6 @@ func TestTokens(t *testing.T) {
 		// - Keywords -
 		{"break", BREAK},
 		{"case", CASE},
-		{"const", CONST},
 		{"continue", CONTINUE},
 		{"default", DEFAULT},
 		{"else", ELSE},
@@ -36,17 +35,16 @@ func TestTokens(t *testing.T) {
 		{"fn", FN},
 		{"for", FOR},
 		{"import", IMPORT},
+		{"export", EXPORT},
 		{"interface", INTERFACE},
 		{"if", IF},
 		{"in", IN},
 		{"map", MAP},
 		{"return", RETURN},
-		{"str", STR},
 		{"struct", STRUCT},
 		{"switch", SWITCH},
 		{"type", TYPE},
 		{"var", VAR},
-		{"weak", WEAK},
 
 		// - Operators -
 		{"+", PLUS},
@@ -58,6 +56,7 @@ func TestTokens(t *testing.T) {
 		{"|", PIPE},
 		{"~", TILDE},
 		{"^", CARET},
+		{"->", ARROW},
 		{"<<", LEFT_SHIFT},
 		{">>", RIGHT_SHIFT},
 		{"+=", PLUS_EQ},
@@ -103,14 +102,50 @@ func TestTokens(t *testing.T) {
 		{"'H'", CHAR},
 		{"69", INTEGER},
 		{"69.42", REAL},
+
+		// - Comment -
+		{"    # This is a single line comment with leading spaces.", EOF},
 	}
 
 	for _, exp := range expected {
-		res := lexToken(exp.str)
+		res := lexToken(exp.str).Token
 		t.Run(exp.str, func(t *testing.T) {
 			if res.Kind != exp.kind {
 				t.Errorf("Test case failed because: '%s' != '%s'\n", res.Kind, exp.kind)
 			}
 		})
 	}
+}
+
+func lexChar(t *testing.T, content, expected string) {
+	t.Run(content, func(t *testing.T) {
+		char := lexToken(content).Token.Value
+		if char != expected {
+			t.Errorf("Test case failed because: character('%s') != character('%s')\n", char, expected)
+		}
+	})
+}
+
+func lexErrChar(t *testing.T, content, lexErr string) {
+	t.Run(content, func(t *testing.T) {
+		err := lexToken(content).Err.Msg
+		if err != lexErr {
+			t.Errorf("Test case failed because: lexErr(\"%s\") != lexErr(\"%s\")\n", err, lexErr)
+		}
+	})
+}
+
+func TestCharLiterals(t *testing.T) {
+	lexChar(t, "'H'", "H")
+	lexChar(t, "'\n'", "\n")
+	lexChar(t, "'\t'", "\t")
+	lexChar(t, "'\r'", "\r")
+	lexChar(t, "'\b'", "\b")
+
+	lexErrChar(t, "'À'", "")
+	lexErrChar(t, "'Б'", "")
+	lexErrChar(t, "'\uFFFD'", ErrUnexpectedUnicodeChar)
+	lexErrChar(t, "''", ErrEmptyCharLiteral)
+	lexErrChar(t, "'", ErrUnterminatedCharLiteral)
+	lexErrChar(t, "'👩🏻‍🤝‍👨🏾'", ErrCharLiteralTooWide)
 }
