@@ -2,7 +2,7 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package frontend
+package ast
 
 type Node interface {
 	NodeVal() string
@@ -41,13 +41,17 @@ func (s *BlockStmt) stmtNode()       {}
 type (
 	FuncDecl struct {
 		Name       string
-		isExported bool
+		IsExported bool
+		IsMain     bool
 		Body       *BlockStmt
+	}
+
+	ExportDecl struct {
 	}
 )
 
-func (d *FuncDecl) NodeVal() string { return d.Name }
-func (d *FuncDecl) declNode()       {}
+func (d FuncDecl) NodeVal() string { return d.Name }
+func (d FuncDecl) declNode()       {}
 
 type Module struct {
 	Name    string

@@ -62,6 +62,7 @@ const (
 const (
 	EOF Tok = iota
 	INVALID
+	START
 
 	// - Keywords -
 	BREAK
@@ -626,7 +627,7 @@ func (l *Lexer) lexWhiteSpaceAndComment() {
 }
 
 func (l *Lexer) Next() {
-	t := &Token{Kind: INVALID}
+	t := &Token{Kind: START}
 
 	// skip whitespaces and new lines
 	l.lexWhiteSpaceAndComment()

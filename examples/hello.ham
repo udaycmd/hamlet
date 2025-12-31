@@ -1,4 +1,3 @@
-
-fn main() -> Void {
-    @echo "Hello, World";
+fn main(String[] args) -> void {
+    @echo("Hello, World");
 }
