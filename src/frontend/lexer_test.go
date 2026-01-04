@@ -98,6 +98,8 @@ func TestTokens(t *testing.T) {
 
 		// - Literals -
 		{"Hamlet", IDENTIFIER},
+		{"$Hamlet", IDENTIFIER},
+		{"_Hamlet", IDENTIFIER},
 		{"\"Hamlet\"", STRING},
 		{"'H'", CHAR},
 		{"69", INTEGER},

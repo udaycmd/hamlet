@@ -44,6 +44,7 @@ type (
 
 	Lexer struct {
 		F                  *bufio.Reader
+		Buf                *strings.Builder
 		Pos                Position
 		Token, PrevToken   *Token
 		Cursor, PrevCursor uint32
@@ -62,7 +63,6 @@ const (
 const (
 	EOF Tok = iota
 	INVALID
-	START
 
 	// - Keywords -
 	BREAK
@@ -367,9 +367,10 @@ func isIdentContinue(r rune) bool {
 func NewLexer(file io.Reader) Lexer {
 	return Lexer{
 		F:         bufio.NewReaderSize(file, maxLexBufSize),
-		Pos:       Position{Line: 1, Column: 1},
+		Buf:       &strings.Builder{},
 		Token:     &Token{Kind: INVALID},
 		PrevToken: &Token{Kind: INVALID},
+		Pos:       Position{Line: 1, Column: 1},
 	}
 }
 
@@ -418,17 +419,17 @@ func (l *Lexer) back() {
 }
 
 func (l *Lexer) lexIdent() (string, string) {
-	name := strings.Builder{}
+	l.Buf.Reset()
 
 	for isIdentContinue(l.CodePoint) {
-		_, err := name.WriteRune(l.CodePoint)
+		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return name.String(), err.Error()
+			return l.Buf.String(), err.Error()
 		}
 		l.step()
 	}
 
-	return name.String(), ""
+	return l.Buf.String(), ""
 }
 
 // [Lexer.lexStr] only identifies any lexical error while scanning a string literal.
@@ -440,25 +441,25 @@ func (l *Lexer) lexStr() (string, string) {
 	// skip the ending `"`
 	defer l.step()
 
-	value := strings.Builder{}
+	l.Buf.Reset()
 
 	for l.CodePoint != '"' {
 		if l.CodePoint == eof {
-			return value.String(), ErrUnterminatedStrLiteral
+			return l.Buf.String(), ErrUnterminatedStrLiteral
 		}
 
 		if l.CodePoint == unicode.ReplacementChar {
-			return value.String(), ErrUnexpectedUnicodeChar
+			return l.Buf.String(), ErrUnexpectedUnicodeChar
 		}
 
-		_, err := value.WriteRune(l.CodePoint)
+		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), err.Error()
+			return l.Buf.String(), err.Error()
 		}
 		l.step()
 	}
 
-	return value.String(), ""
+	return l.Buf.String(), ""
 }
 
 func (l *Lexer) lexChar() (string, string) {
@@ -468,40 +469,40 @@ func (l *Lexer) lexChar() (string, string) {
 	// skip the ending `'`
 	defer l.step()
 
-	value := strings.Builder{}
+	l.Buf.Reset()
 	charCount := 0
 	for l.CodePoint != '\'' {
 		if l.CodePoint == eof {
-			return value.String(), ErrUnterminatedCharLiteral
+			return l.Buf.String(), ErrUnterminatedCharLiteral
 		}
 
 		if l.CodePoint == unicode.ReplacementChar {
-			return value.String(), ErrUnexpectedUnicodeChar
+			return l.Buf.String(), ErrUnexpectedUnicodeChar
 		}
 
-		_, err := value.WriteRune(l.CodePoint)
+		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), err.Error()
+			return l.Buf.String(), err.Error()
 		}
 
 		charCount++
 		l.step()
 	}
 
-	if value.Len() == 0 {
-		return value.String(), ErrEmptyCharLiteral
+	if l.Buf.Len() == 0 {
+		return l.Buf.String(), ErrEmptyCharLiteral
 	}
 
-	if !(value.Len() <= 4 && charCount == 1) {
-		return value.String(), ErrCharLiteralTooWide
+	if !(l.Buf.Len() <= 4 && charCount == 1) {
+		return l.Buf.String(), ErrCharLiteralTooWide
 	}
 
-	return value.String(), ""
+	return l.Buf.String(), ""
 }
 
-func (l *Lexer) lexDigitSeq(sb *strings.Builder, base Radix) string {
+func (l *Lexer) lexDigitSeq(base Radix) string {
 	for isDigit(l.CodePoint, base) || l.CodePoint == '_' {
-		_, err := sb.WriteRune(l.CodePoint)
+		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
 			return err.Error()
 		}
@@ -516,14 +517,14 @@ func (l *Lexer) lexDigitSeq(sb *strings.Builder, base Radix) string {
 //
 // [umka-lang]: https://github.com/vtereshkov/umka-lang.git
 func (l *Lexer) lexNum() (string, Tok, string) {
-	value := strings.Builder{}
+	l.Buf.Reset()
 	base := base10
 	isReal := false
 
 	if l.CodePoint == '0' {
-		_, err := value.WriteRune(l.CodePoint)
+		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), INVALID, err.Error()
+			return l.Buf.String(), INVALID, err.Error()
 		}
 
 		l.step()
@@ -539,22 +540,22 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 
 		if nbase != base10 {
 			base = nbase
-			_, err := value.WriteRune(l.CodePoint)
+			_, err := l.Buf.WriteRune(l.CodePoint)
 			if err != nil {
-				return value.String(), INVALID, err.Error()
+				return l.Buf.String(), INVALID, err.Error()
 			}
 
 			l.step()
 			if !isDigit(l.CodePoint, base) {
-				return value.String(), INVALID, ErrNoDigitsAfterBasePrefix
+				return l.Buf.String(), INVALID, ErrNoDigitsAfterBasePrefix
 			}
 		}
 	}
 
-	l.lexDigitSeq(&value, base)
+	l.lexDigitSeq(base)
 
 	if base != base10 {
-		return value.String(), INTEGER, ""
+		return l.Buf.String(), INTEGER, ""
 	}
 
 	if l.CodePoint == '.' {
@@ -563,50 +564,50 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 		// found `..` (range) operator
 		if l.CodePoint == '.' {
 			l.back()
-			return value.String(), INTEGER, ""
+			return l.Buf.String(), INTEGER, ""
 		}
 
 		isReal = true
-		_, err := value.WriteRune('.')
+		_, err := l.Buf.WriteRune('.')
 		if err != nil {
-			return value.String(), INVALID, ""
+			return l.Buf.String(), INVALID, ""
 		}
 
 		if !isDigit(l.CodePoint, base10) {
-			return value.String(), INVALID, ErrNoDigitAfterDecimalPoint
+			return l.Buf.String(), INVALID, ErrNoDigitAfterDecimalPoint
 		}
 
-		l.lexDigitSeq(&value, base10)
+		l.lexDigitSeq(base10)
 	}
 
 	if l.CodePoint == 'e' || l.CodePoint == 'E' {
 		isReal = true
-		_, err := value.WriteRune(l.CodePoint)
+		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return value.String(), INVALID, ""
+			return l.Buf.String(), INVALID, ""
 		}
 
 		l.step()
 		if l.CodePoint == '+' || l.CodePoint == '-' {
-			_, err := value.WriteRune(l.CodePoint)
+			_, err := l.Buf.WriteRune(l.CodePoint)
 			if err != nil {
-				return value.String(), INVALID, ""
+				return l.Buf.String(), INVALID, ""
 			}
 			l.step()
 		}
 
 		if !isDigit(l.CodePoint, base10) {
-			return value.String(), INVALID, ErrNoDigitAfterExponent
+			return l.Buf.String(), INVALID, ErrNoDigitAfterExponent
 		}
 
-		l.lexDigitSeq(&value, base10)
+		l.lexDigitSeq(base10)
 	}
 
 	if isReal {
-		return value.String(), REAL, ""
+		return l.Buf.String(), REAL, ""
 	}
 
-	return value.String(), INTEGER, ""
+	return l.Buf.String(), INTEGER, ""
 }
 
 func (l *Lexer) lexWhiteSpaceAndComment() {
@@ -614,11 +615,8 @@ func (l *Lexer) lexWhiteSpaceAndComment() {
 
 	for isWhitespace(l.CodePoint) || l.CodePoint == '#' {
 		if l.CodePoint == '#' {
-			for {
+			for !isNewLineTerminator(l.CodePoint) && l.CodePoint != eof {
 				l.step()
-				if isNewLineTerminator(l.CodePoint) || l.CodePoint == eof {
-					break
-				}
 			}
 		}
 
@@ -627,7 +625,7 @@ func (l *Lexer) lexWhiteSpaceAndComment() {
 }
 
 func (l *Lexer) Next() {
-	t := &Token{Kind: START}
+	t := &Token{Kind: INVALID}
 
 	// skip whitespaces and new lines
 	l.lexWhiteSpaceAndComment()

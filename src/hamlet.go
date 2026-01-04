@@ -17,10 +17,6 @@ const (
 	Yellow = "\033[33m"
 )
 
-var (
-	flags = flag.FlagSet{}
-)
-
 func Colorize(text, color string) string {
 	return color + text + Reset
 }
@@ -29,7 +25,7 @@ func printVersion(w io.Writer) {
 	fmt.Fprintln(w, "Hamlet Interpreter", Colorize(HamletVersion, Yellow))
 }
 
-func help(w io.Writer) {
+func help(flags *flag.FlagSet, w io.Writer) {
 	flags.SetOutput(w)
 
 	printVersion(w)
@@ -40,6 +36,8 @@ func help(w io.Writer) {
 }
 
 func hamlet_main(args []string) error {
+	flags := &flag.FlagSet{}
+
 	v := flags.Bool("version", false, "print the Hamlet version number and exit")
 	nc := flags.Bool("nocheck", false, "disable typechecking")
 	h := flags.Bool("help", false, "print help")
@@ -49,13 +47,13 @@ func hamlet_main(args []string) error {
 
 	if err != nil {
 		if err == flag.ErrHelp {
-			help(os.Stdout)
+			help(flags, os.Stdout)
 		}
 		return err
 	}
 
 	if *h {
-		help(os.Stdout)
+		help(flags, os.Stdout)
 		return nil
 	}
 
