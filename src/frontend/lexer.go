@@ -145,7 +145,7 @@ const (
 	STRING
 )
 
-var Keywords = map[string]Tok{
+var keywords = map[string]Tok{
 	"break":     BREAK,
 	"case":      CASE,
 	"continue":  CONTINUE,
@@ -355,6 +355,11 @@ func isIdentStart(r rune) bool {
 	return r == '$' || r == '_' || unicode.IsLetter(r)
 }
 
+func isKeyword(name string) bool {
+	_, ok := keywords[name]
+	return ok
+}
+
 func isIdentContinue(r rune) bool {
 	return isIdentStart(r) || isDigit(r, base10)
 }
@@ -428,7 +433,7 @@ func (l *Lexer) lexIdent() (string, string) {
 
 // [Lexer.lexStr] only identifies any lexical error while scanning a string literal.
 // It does not do any kind of string validation and parsing.
-func (l *Lexer) lexStr() (string, string) {
+func (l *Lexer) lexStr() string {
 	// skip the starting `"`
 	l.step()
 
@@ -439,24 +444,24 @@ func (l *Lexer) lexStr() (string, string) {
 
 	for l.CodePoint != '"' {
 		if l.CodePoint == eof {
-			return l.Buf.String(), ErrUnterminatedStrLiteral
+			return ErrUnterminatedStrLiteral
 		}
 
 		if l.CodePoint == unicode.ReplacementChar {
-			return l.Buf.String(), ErrUnexpectedUnicodeChar
+			return ErrUnexpectedUnicodeChar
 		}
 
 		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return l.Buf.String(), err.Error()
+			return err.Error()
 		}
 		l.step()
 	}
 
-	return l.Buf.String(), ""
+	return l.Buf.String()
 }
 
-func (l *Lexer) lexChar() (string, string) {
+func (l *Lexer) lexChar() string {
 	// skip the starting `'`
 	l.step()
 
@@ -467,16 +472,16 @@ func (l *Lexer) lexChar() (string, string) {
 	charCount := 0
 	for l.CodePoint != '\'' {
 		if l.CodePoint == eof {
-			return l.Buf.String(), ErrUnterminatedCharLiteral
+			return ErrUnterminatedCharLiteral
 		}
 
 		if l.CodePoint == unicode.ReplacementChar {
-			return l.Buf.String(), ErrUnexpectedUnicodeChar
+			return ErrUnexpectedUnicodeChar
 		}
 
 		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return l.Buf.String(), err.Error()
+			return err.Error()
 		}
 
 		charCount++
@@ -484,14 +489,14 @@ func (l *Lexer) lexChar() (string, string) {
 	}
 
 	if l.Buf.Len() == 0 {
-		return l.Buf.String(), ErrEmptyCharLiteral
+		return ErrEmptyCharLiteral
 	}
 
 	if !(l.Buf.Len() <= 4 && charCount == 1) {
-		return l.Buf.String(), ErrCharLiteralTooWide
+		return ErrCharLiteralTooWide
 	}
 
-	return l.Buf.String(), ""
+	return ""
 }
 
 func (l *Lexer) lexDigitSeq(base Radix) string {
@@ -510,7 +515,7 @@ func (l *Lexer) lexDigitSeq(base Radix) string {
 // Referenced from [umka-lang].
 //
 // [umka-lang]: https://github.com/vtereshkov/umka-lang.git
-func (l *Lexer) lexNum() (string, Tok, string) {
+func (l *Lexer) lexNum() (Tok, string) {
 	l.Buf.Reset()
 	base := base10
 	isReal := false
@@ -518,7 +523,7 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 	if l.CodePoint == '0' {
 		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return l.Buf.String(), INVALID, err.Error()
+			return INVALID, err.Error()
 		}
 
 		l.step()
@@ -536,12 +541,12 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 			base = nbase
 			_, err := l.Buf.WriteRune(l.CodePoint)
 			if err != nil {
-				return l.Buf.String(), INVALID, err.Error()
+				return INVALID, err.Error()
 			}
 
 			l.step()
 			if !isDigit(l.CodePoint, base) {
-				return l.Buf.String(), INVALID, ErrNoDigitsAfterBasePrefix
+				return INVALID, ErrNoDigitsAfterBasePrefix
 			}
 		}
 	}
@@ -549,7 +554,7 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 	l.lexDigitSeq(base)
 
 	if base != base10 {
-		return l.Buf.String(), INTEGER, ""
+		return INTEGER, ""
 	}
 
 	if l.CodePoint == '.' {
@@ -558,17 +563,17 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 		// found `..` (range) operator
 		if l.CodePoint == '.' {
 			l.back()
-			return l.Buf.String(), INTEGER, ""
+			return INTEGER, ""
 		}
 
 		isReal = true
 		_, err := l.Buf.WriteRune('.')
 		if err != nil {
-			return l.Buf.String(), INVALID, ""
+			return INVALID, ""
 		}
 
 		if !isDigit(l.CodePoint, base10) {
-			return l.Buf.String(), INVALID, ErrNoDigitAfterDecimalPoint
+			return INVALID, ErrNoDigitAfterDecimalPoint
 		}
 
 		l.lexDigitSeq(base10)
@@ -578,30 +583,30 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 		isReal = true
 		_, err := l.Buf.WriteRune(l.CodePoint)
 		if err != nil {
-			return l.Buf.String(), INVALID, ""
+			return INVALID, ""
 		}
 
 		l.step()
 		if l.CodePoint == '+' || l.CodePoint == '-' {
 			_, err := l.Buf.WriteRune(l.CodePoint)
 			if err != nil {
-				return l.Buf.String(), INVALID, ""
+				return INVALID, ""
 			}
 			l.step()
 		}
 
 		if !isDigit(l.CodePoint, base10) {
-			return l.Buf.String(), INVALID, ErrNoDigitAfterExponent
+			return INVALID, ErrNoDigitAfterExponent
 		}
 
 		l.lexDigitSeq(base10)
 	}
 
 	if isReal {
-		return l.Buf.String(), REAL, ""
+		return REAL, ""
 	}
 
-	return l.Buf.String(), INTEGER, ""
+	return INTEGER, ""
 }
 
 func (l *Lexer) lexWhiteSpaceAndComment() {
@@ -644,7 +649,7 @@ func (l *Lexer) Next() {
 	l.PrevToken = l.Token
 	t := &Token{Kind: INVALID}
 
-	// skip whitespaces and new lines
+	// skip whitespaces and comments
 	l.lexWhiteSpaceAndComment()
 
 	switch l.CodePoint {
@@ -838,29 +843,29 @@ func (l *Lexer) Next() {
 		t.Kind = SEMICOLON
 		l.step()
 	case '"':
-		v, err := l.lexStr()
-		if err != "" {
-			l.Err.Msg = err
+		es := l.lexStr()
+		if es != "" {
+			l.Err.Msg = es
 		}
 
 		t.Kind = STRING
-		t.Value = v
+		t.Value = l.Buf.String()
 	case '\'':
-		v, err := l.lexChar()
-		if err != "" {
-			l.Err.Msg = err
+		es := l.lexChar()
+		if es != "" {
+			l.Err.Msg = es
 		}
 
 		t.Kind = CHAR
-		t.Value = v
+		t.Value = l.Buf.String()
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		v, kind, err := l.lexNum()
-		if err != "" {
-			l.Err.Msg = err
+		kind, es := l.lexNum()
+		if es != "" {
+			l.Err.Msg = es
 		}
 
 		t.Kind = kind
-		t.Value = v
+		t.Value = l.Buf.String()
 	case '\n':
 		t.Kind = l.lexNl()
 	default:
@@ -870,11 +875,11 @@ func (l *Lexer) Next() {
 				l.Err.Msg = err
 			}
 
-			t.Value = name
-			if Keywords[name] != 0 {
-				t.Kind = Keywords[name]
+			if isKeyword(name) {
+				t.Kind = keywords[name]
 			} else {
 				t.Kind = IDENTIFIER
+				t.Value = name
 			}
 		} else if l.CodePoint == unicode.ReplacementChar { // invalid unicode codepoint
 			l.Err.Msg = ErrUnexpectedUnicodeChar

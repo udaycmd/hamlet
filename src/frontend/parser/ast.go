@@ -2,7 +2,9 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package ast
+package parser
+
+import "github.com/udaycmd/hamlet/src/frontend"
 
 type Node interface {
 	NodeVal() string
@@ -58,4 +60,10 @@ type Module struct {
 	Decls   []Decl
 	Imports []string
 	Exports []string
+}
+
+type BinaryExpr struct {
+	Rhs Expr
+	Op  frontend.Tok
+	Lhs Expr
 }

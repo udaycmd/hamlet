@@ -2,12 +2,12 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package frontend
+package parser
 
 import (
 	"io"
 
-	"github.com/udaycmd/hamlet/src/frontend/ast"
+	. "github.com/udaycmd/hamlet/src/frontend"
 )
 
 type parser struct {
@@ -42,7 +42,7 @@ func (p *parser) expectNext(expected Tok) bool {
 	return false
 }
 
-func (p *parser) parseDecl() ast.Decl {
+func (p *parser) parseDecl() Decl {
 	switch p.curr() {
 	case FN:
 		return p.parseFnDecl(false)
@@ -53,7 +53,7 @@ func (p *parser) parseDecl() ast.Decl {
 	}
 }
 
-func (p *parser) parseExportDecl() ast.Decl {
+func (p *parser) parseExportDecl() Decl {
 	p.advance()
 
 	switch p.curr() {
@@ -64,8 +64,8 @@ func (p *parser) parseExportDecl() ast.Decl {
 	}
 }
 
-func (p *parser) parseFnDecl(exported bool) ast.Decl {
-	decl := ast.FuncDecl{IsExported: exported}
+func (p *parser) parseFnDecl(exported bool) Decl {
+	decl := FuncDecl{IsExported: exported}
 
 	if !p.expectNext(IDENTIFIER) {
 		// TODO: Better error report!
@@ -95,10 +95,10 @@ func (p *parser) parseFnDecl(exported bool) ast.Decl {
 	return decl
 }
 
-func (p *parser) parseFnParamDecl() ast.Decl {
+func (p *parser) parseFnParamDecl() Decl {
 	return nil
 }
 
-func (p *parser) parseBlockStmt() *ast.BlockStmt {
+func (p *parser) parseBlockStmt() *BlockStmt {
 	return nil
 }
