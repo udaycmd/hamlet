@@ -63,6 +63,8 @@ const (
 const (
 	EOF Tok = iota
 	INVALID
+	EOL
+	IMPLICIT_SEMICOLON
 
 	// - Keywords -
 	BREAK
@@ -173,6 +175,8 @@ func (t Tok) String() string {
 		s = "eof"
 	case INVALID:
 		s = "invalid"
+	case EOL, IMPLICIT_SEMICOLON:
+		s = "newline"
 	case BREAK:
 		s = "break"
 	case CASE:
@@ -324,15 +328,6 @@ func (t Tok) IsNumber() bool {
 	return t == INTEGER || t == REAL
 }
 
-func isNewLineTerminator(r rune) bool {
-	switch r {
-	case '\u2028', '\u2029', '\n':
-		return true
-	default:
-		return false
-	}
-}
-
 func isHexDigit(r rune) bool {
 	return unicode.Is(unicode.ASCII_Hex_Digit, r)
 }
@@ -353,7 +348,7 @@ func isDigit(r rune, base Radix) bool {
 }
 
 func isWhitespace(r rune) bool {
-	return unicode.Is(unicode.White_Space, r)
+	return r == ' ' || r == '\t' || r == '\r'
 }
 
 func isIdentStart(r rune) bool {
@@ -377,7 +372,6 @@ func NewLexer(file io.Reader) Lexer {
 // Forwards the [Lexer.F] by one rune.
 func (l *Lexer) step() {
 	l.PrevCursor = l.Cursor
-	l.PrevToken = l.Token
 
 	codePoint, width, err := l.F.ReadRune()
 	if err != nil && err != io.EOF {
@@ -388,7 +382,7 @@ func (l *Lexer) step() {
 		codePoint = eof
 	}
 
-	if isNewLineTerminator(codePoint) {
+	if codePoint == '\n' {
 		l.Pos.Line++
 		l.Pos.Column = 0
 	} else {
@@ -611,20 +605,43 @@ func (l *Lexer) lexNum() (string, Tok, string) {
 }
 
 func (l *Lexer) lexWhiteSpaceAndComment() {
-	l.step()
+	if l.Cursor == 0 {
+		l.step()
+	}
 
 	for isWhitespace(l.CodePoint) || l.CodePoint == '#' {
 		if l.CodePoint == '#' {
-			for !isNewLineTerminator(l.CodePoint) && l.CodePoint != eof {
+			for l.CodePoint != '\n' && l.CodePoint != eof {
 				l.step()
 			}
 		}
 
+		// check for IMPLICIT_SEMICOLON or a regular EOL in Next()
+		if l.CodePoint == '\n' {
+			return
+		}
+
+		// consume EOF
 		l.step()
 	}
 }
 
+func (l *Lexer) lexNl() Tok {
+	tok := EOL
+
+	switch l.PrevToken.Kind {
+	case BREAK, CONTINUE, RETURN, RIGHT_PAREN, RIGHT_BRACKET, QUESTION,
+		RIGHT_BRACE, CARET, IDENTIFIER, INTEGER, REAL, CHAR, STRING:
+		tok = IMPLICIT_SEMICOLON
+	}
+
+	// just skip the '\n'
+	l.step()
+	return tok
+}
+
 func (l *Lexer) Next() {
+	l.PrevToken = l.Token
 	t := &Token{Kind: INVALID}
 
 	// skip whitespaces and new lines
@@ -641,6 +658,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = PLUS
 		}
+		l.step()
 	case '-':
 		l.step()
 		switch l.CodePoint {
@@ -652,6 +670,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = MINUS
 		}
+		l.step()
 	case '*':
 		l.step()
 		if l.CodePoint == '=' {
@@ -660,6 +679,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = STAR
 		}
+		l.step()
 	case '/':
 		l.step()
 		if l.CodePoint == '=' {
@@ -668,6 +688,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = SLASH
 		}
+		l.step()
 	case '%':
 		l.step()
 		if l.CodePoint == '=' {
@@ -676,6 +697,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = PERCENT
 		}
+		l.step()
 	case '&':
 		l.step()
 		switch l.CodePoint {
@@ -687,6 +709,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = AMPERSAND
 		}
+		l.step()
 	case '|':
 		l.step()
 		switch l.CodePoint {
@@ -698,6 +721,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = PIPE
 		}
+		l.step()
 	case '~':
 		l.step()
 		switch l.CodePoint {
@@ -707,6 +731,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = TILDE
 		}
+		l.step()
 	case '=':
 		l.step()
 		if l.CodePoint == '=' {
@@ -715,6 +740,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = EQUAL
 		}
+		l.step()
 	case '!':
 		l.step()
 		if l.CodePoint == '=' {
@@ -723,6 +749,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = BANG
 		}
+		l.step()
 	case '.':
 		l.step()
 		if l.CodePoint == '.' {
@@ -731,6 +758,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = DOT
 		}
+		l.step()
 	case ':':
 		l.step()
 		switch l.CodePoint {
@@ -742,6 +770,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = COLON
 		}
+		l.step()
 	case '<':
 		l.step()
 		switch l.CodePoint {
@@ -759,6 +788,7 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = LESS
 		}
+		l.step()
 	case '>':
 		l.step()
 		switch l.CodePoint {
@@ -776,26 +806,37 @@ func (l *Lexer) Next() {
 			l.back()
 			t.Kind = GREATER
 		}
+		l.step()
 	case '^':
 		t.Kind = CARET
+		l.step()
 	case '?':
 		t.Kind = QUESTION
+		l.step()
 	case '(':
 		t.Kind = LEFT_PAREN
+		l.step()
 	case ')':
 		t.Kind = RIGHT_PAREN
+		l.step()
 	case '[':
 		t.Kind = LEFT_BRACKET
+		l.step()
 	case ']':
 		t.Kind = RIGHT_BRACKET
+		l.step()
 	case '{':
 		t.Kind = LEFT_BRACE
+		l.step()
 	case '}':
 		t.Kind = RIGHT_BRACE
+		l.step()
 	case ',':
 		t.Kind = COMMA
+		l.step()
 	case ';':
 		t.Kind = SEMICOLON
+		l.step()
 	case '"':
 		v, err := l.lexStr()
 		if err != "" {
@@ -820,6 +861,8 @@ func (l *Lexer) Next() {
 
 		t.Kind = kind
 		t.Value = v
+	case '\n':
+		t.Kind = l.lexNl()
 	default:
 		if isIdentStart(l.CodePoint) { // identifiers
 			name, err := l.lexIdent()

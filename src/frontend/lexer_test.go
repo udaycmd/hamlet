@@ -11,14 +11,24 @@ import (
 	. "github.com/udaycmd/hamlet/src/frontend"
 )
 
-func lexToken(content string) Lexer {
+func lexSingleToken(content string) *Token {
 	lexer := NewLexer(strings.NewReader(content))
 	lexer.Next()
-	return lexer
+	return lexer.Token
+}
+
+func lexErrSingleToken(content string) Error {
+	lexer := NewLexer(strings.NewReader(content))
+	lexer.Next()
+	return lexer.Err
+}
+
+func lexTokens(content string) Lexer {
+	return NewLexer(strings.NewReader(content))
 }
 
 func TestTokens(t *testing.T) {
-	expected := []struct {
+	cases := []struct {
 		str  string
 		kind Tok
 	}{
@@ -109,11 +119,12 @@ func TestTokens(t *testing.T) {
 		{"    # This is a single line comment with leading spaces.", EOF},
 	}
 
-	for _, exp := range expected {
-		res := lexToken(exp.str).Token
-		t.Run(exp.str, func(t *testing.T) {
-			if res.Kind != exp.kind {
-				t.Errorf("Test case failed because: '%s' != '%s'\n", res.Kind, exp.kind)
+	for _, tc := range cases {
+		res := lexSingleToken(tc.str)
+
+		t.Run(tc.str, func(t *testing.T) {
+			if res.Kind != tc.kind {
+				t.Errorf("Test case failed because: '%s' != '%s'\n", res.Kind, tc.kind)
 			}
 		})
 	}
@@ -121,7 +132,7 @@ func TestTokens(t *testing.T) {
 
 func lexChar(t *testing.T, content, expected string) {
 	t.Run(content, func(t *testing.T) {
-		char := lexToken(content).Token.Value
+		char := lexSingleToken(content).Value
 		if char != expected {
 			t.Errorf("Test case failed because: character('%s') != character('%s')\n", char, expected)
 		}
@@ -130,7 +141,7 @@ func lexChar(t *testing.T, content, expected string) {
 
 func lexErrChar(t *testing.T, content, lexErr string) {
 	t.Run(content, func(t *testing.T) {
-		err := lexToken(content).Err.Msg
+		err := lexErrSingleToken(content).Msg
 		if err != lexErr {
 			t.Errorf("Test case failed because: lexErr(\"%s\") != lexErr(\"%s\")\n", err, lexErr)
 		}
@@ -150,4 +161,63 @@ func TestCharLiterals(t *testing.T) {
 	lexErrChar(t, "''", ErrEmptyCharLiteral)
 	lexErrChar(t, "'", ErrUnterminatedCharLiteral)
 	lexErrChar(t, "'👩🏻‍🤝‍👨🏾'", ErrCharLiteralTooWide)
+}
+
+func TestImplicitSemiColon(t *testing.T) {
+	cases := []struct {
+		str   string
+		kinds []Tok
+	}{
+		// - Keywords that trigger implicit semicolon -
+		{"return\n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOF}},
+		{"break\n", []Tok{BREAK, IMPLICIT_SEMICOLON, EOF}},
+		{"continue\n", []Tok{CONTINUE, IMPLICIT_SEMICOLON, EOF}},
+
+		// - Literals -
+		{"123\n", []Tok{INTEGER, IMPLICIT_SEMICOLON, EOF}},
+		{"45.67\n", []Tok{REAL, IMPLICIT_SEMICOLON, EOF}},
+		{"\"string\"\n", []Tok{STRING, IMPLICIT_SEMICOLON, EOF}},
+		{"'c'\n", []Tok{CHAR, IMPLICIT_SEMICOLON, EOF}},
+		{"ident\n", []Tok{IDENTIFIER, IMPLICIT_SEMICOLON, EOF}},
+
+		// - Brackets / Parens -
+		{")\n", []Tok{RIGHT_PAREN, IMPLICIT_SEMICOLON, EOF}},
+		{"]\n", []Tok{RIGHT_BRACKET, IMPLICIT_SEMICOLON, EOF}},
+		{"}\n", []Tok{RIGHT_BRACE, IMPLICIT_SEMICOLON, EOF}},
+
+		// - Operator -
+		{"?\n", []Tok{QUESTION, IMPLICIT_SEMICOLON, EOF}},
+
+		// - Cases NOT triggering implicit semicolon -
+		{"+\n", []Tok{PLUS, EOL, EOF}},
+		{"+=\n", []Tok{PLUS_EQ, EOL, EOF}},
+		{"-\n", []Tok{MINUS, EOL, EOF}},
+		{"(\n", []Tok{LEFT_PAREN, EOL, EOF}},
+		{"{\n", []Tok{LEFT_BRACE, EOL, EOF}},
+		{",\n", []Tok{COMMA, EOL, EOF}},
+		{".\n", []Tok{DOT, EOL, EOF}},
+
+		// - Multiple newlines -
+		{"return\n\n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
+		{"return \n  \n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
+		{"return # this is a comment after keyword\n \n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
+	
+		// - Mixed -
+		{"a = 1\n b = 2", []Tok{IDENTIFIER, EQUAL, INTEGER, IMPLICIT_SEMICOLON, IDENTIFIER, EQUAL, INTEGER, EOF}},
+		{"return\n 1 + 2", []Tok{RETURN, IMPLICIT_SEMICOLON, INTEGER, PLUS, INTEGER, EOF}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.str, func(t *testing.T) {
+			lexer := lexTokens(tc.str)
+			lexer.Next()
+
+			for _, kind := range tc.kinds {
+				if lexer.Token.Kind != kind {
+					t.Errorf("Test Case failed because: Tok('%s') != Tok('%s')", lexer.Token.Kind, kind)
+				}
+				lexer.Next()
+			}
+		})
+	}
 }
