@@ -2,18 +2,34 @@
 
 > The following grammer is represented in a flavour of [BNF](https://en.wikipedia.org/wiki/Backus-Naur_form), having some special _specifier_ keywords.
 
-**Literal** &rarr; _one-of { string | character | NumericalLiteral | BooleanLiteral | nil }_
+**Literal** &rarr; _one-of { string | character | NumericalLiteral | BooleanLiteral | empty }_
 
 **BooleanLiteral** &rarr; _one-of { true | false }_
 
 **NumericalLiteral** &rarr; _one-of { real | integer }_
 
-**Expression** &rarr; _one-of { GroupedExpression | UnaryExpression | BinaryExpression | Literal }_
+**BinOp** &rarr; _one-of { EqualityOp | ComparisonOp | TermOp | FactorOp }_
 
-**Operator** &rarr; _one-of { '==' | '!=' | '<' | '<=' | '>' | '>=' | '+'  | '-'  | '*' | '/' }_
+**EqualityOp** &rarr; _one-of { '==' | '!=' }_
 
-**GroupedExpression** &rarr; '(' Expression ')'
+**ComparisonOp** &rarr; _one-of { '<' | '<=' | '>' | '>=' }_
 
-**UnaryExpression** &rarr; _one-of { '~' | '!' } Expression_
+**TermOp** &rarr; _one-of { '+' | '-' }_
 
-**BinaryExpression** &rarr; _Expression Operator Expression_
+**FactorOp** &rarr; _one-of { '*' | '/' }_
+
+**UniOp** &rarr; _one-of { '~' | '!' }_
+
+**Expression** &rarr; _EqualityExpression_
+
+**EqualityExpression** &rarr; _ComparisonExpression zero-or-many-of { one-of EqualityOp ComparisonExpression }_
+
+**ComparisonExpression** &rarr; _TermExpression zero-or-many-of { one-of ComparisonOp TermExpression }_
+
+**TermExpression** &rarr; _FactorizedExpression zero-or-many-of { one-of TermOp FactorizedExpression }_
+
+**FactorizedExpression** &rarr; _UnaryExpression zero-or-many-of { one-of FactorOp UnaryExpression }_
+
+**UnaryExpression** &rarr; _one-of { one-of UniOp UnaryExpression | PrimaryExpression }_
+
+**PrimaryExpression** &rarr; _one-of { Literal | '(' Expression ')' }_

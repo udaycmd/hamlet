@@ -55,6 +55,9 @@ func TestTokens(t *testing.T) {
 		{"switch", SWITCH},
 		{"type", TYPE},
 		{"var", VAR},
+		{"true", TRUE},
+		{"false", FALSE},
+		{"empty", EMPTY},
 
 		// - Operators -
 		{"+", PLUS},
@@ -201,7 +204,7 @@ func TestImplicitSemiColon(t *testing.T) {
 		{"return\n\n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
 		{"return \n  \n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
 		{"return # this is a comment after keyword\n \n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
-	
+
 		// - Mixed -
 		{"a = 1\n b = 2", []Tok{IDENTIFIER, EQUAL, INTEGER, IMPLICIT_SEMICOLON, IDENTIFIER, EQUAL, INTEGER, EOF}},
 		{"return\n 1 + 2", []Tok{RETURN, IMPLICIT_SEMICOLON, INTEGER, PLUS, INTEGER, EOF}},

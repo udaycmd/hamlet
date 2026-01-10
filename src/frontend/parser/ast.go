@@ -7,7 +7,8 @@ package parser
 import "github.com/udaycmd/hamlet/src/frontend"
 
 type Node interface {
-	NodeVal() string
+	Start() frontend.Position
+	End() frontend.Position
 }
 
 type (
@@ -62,8 +63,27 @@ type Module struct {
 	Exports []string
 }
 
-type BinaryExpr struct {
-	Rhs Expr
-	Op  frontend.Tok
-	Lhs Expr
-}
+type (
+	BinaryExpr struct {
+		Rhs Expr
+		Op  frontend.Tok
+		Lhs Expr
+	}
+
+	UnaryExpr struct {
+		X  Expr
+		Op frontend.Tok
+	}
+
+	GroupExpr struct {
+		lparen frontend.Position
+		X      Expr
+		rparen frontend.Position
+	}
+)
+
+func (e BinaryExpr) exprNode()               {}
+func (e UnaryExpr) exprNode()                {}
+func (e GroupExpr) exprNode()                {}
+func (e GroupExpr) Start() frontend.Position { return e.lparen }
+func (e GroupExpr) End() frontend.Position   { return e.rparen }

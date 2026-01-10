@@ -86,6 +86,9 @@ const (
 	SWITCH
 	TYPE
 	VAR
+	TRUE
+	FALSE
+	EMPTY
 
 	// - Operators -
 	ARROW
@@ -165,6 +168,9 @@ var keywords = map[string]Tok{
 	"switch":    SWITCH,
 	"type":      TYPE,
 	"var":       VAR,
+	"true":      TRUE,
+	"false":     FALSE,
+	"empty":     EMPTY,
 }
 
 func (t Tok) String() string {
@@ -215,6 +221,12 @@ func (t Tok) String() string {
 		s = "type"
 	case VAR:
 		s = "var"
+	case TRUE:
+		s = "true"
+	case FALSE:
+		s = "false"
+	case EMPTY:
+		s = "empty"
 	case ARROW:
 		s = "->"
 	case PLUS:

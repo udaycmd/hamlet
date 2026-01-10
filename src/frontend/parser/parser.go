@@ -16,8 +16,12 @@ type parser struct {
 }
 
 func NewParser(source io.Reader) *parser {
+	// TODO: remove this
+	l := NewLexer(source)
+	l.Next()
+
 	return &parser{
-		lexer: NewLexer(source),
+		lexer: l,
 	}
 }
 
@@ -92,7 +96,7 @@ func (p *parser) parseFnDecl(exported bool) Decl {
 
 	decl.Body = p.parseBlockStmt()
 
-	return decl
+	return nil
 }
 
 func (p *parser) parseFnParamDecl() Decl {
@@ -101,4 +105,26 @@ func (p *parser) parseFnParamDecl() Decl {
 
 func (p *parser) parseBlockStmt() *BlockStmt {
 	return nil
+}
+
+// Expressions
+
+func (p *parser) parsePrimaryExpr() Expr {
+	var x Expr
+
+	switch p.curr() {
+	case TRUE:
+	case FALSE:
+	case EMPTY:
+	case REAL:
+	case INTEGER:
+	case STRING:
+	case CHAR:
+	case LEFT_PAREN:
+		// parse generic expr
+		p.advance() // consume ')'
+		x = GroupExpr{}
+	}
+
+	return x
 }
