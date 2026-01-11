@@ -4,11 +4,11 @@
 
 package parser
 
-import "github.com/udaycmd/hamlet/src/lexer"
+import "github.com/udaycmd/hamlet/src/token"
 
 type Node interface {
-	Start() lexer.Position
-	End() lexer.Position
+	Start() token.Position
+	End() token.Position
 }
 
 type (
@@ -64,26 +64,42 @@ type Module struct {
 }
 
 type (
+	BasicLit struct {
+		Lit token.Token
+	}
+
 	BinaryExpr struct {
 		Rhs Expr
-		Op  lexer.Tok
+		Op  token.Tok
 		Lhs Expr
 	}
 
 	UnaryExpr struct {
 		X  Expr
-		Op lexer.Tok
+		Op token.Tok
 	}
 
 	GroupExpr struct {
-		lparen lexer.Position
+		Lparen token.Position
 		X      Expr
-		rparen lexer.Position
+		Rparen token.Position
 	}
 )
 
-func (e BinaryExpr) exprNode()               {}
-func (e UnaryExpr) exprNode()                {}
-func (e GroupExpr) exprNode()                {}
-func (e GroupExpr) Start() lexer.Position { return e.lparen }
-func (e GroupExpr) End() lexer.Position   { return e.rparen }
+func (e BasicLit) exprNode()             {}
+func (e BasicLit) Start() token.Position { return e.Lit.Pos }
+func (e BasicLit) End() token.Position {
+	width := len(e.Lit.Value)
+
+	return token.Position{
+		Line:   e.Lit.Pos.Line,
+		Column: e.Lit.Pos.Column + width,
+		Offset: e.Lit.Pos.Offset + width,
+	}
+}
+
+func (e BinaryExpr) exprNode()            {}
+func (e UnaryExpr) exprNode()             {}
+func (e GroupExpr) exprNode()             {}
+func (e GroupExpr) Start() token.Position { return e.Lparen }
+func (e GroupExpr) End() token.Position   { return e.Rparen }

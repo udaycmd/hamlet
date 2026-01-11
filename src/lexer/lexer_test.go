@@ -10,6 +10,7 @@ import (
 
 	"github.com/udaycmd/hamlet/src/errors"
 	. "github.com/udaycmd/hamlet/src/lexer"
+	. "github.com/udaycmd/hamlet/src/token"
 )
 
 func lexSingleToken(content string) *Token {

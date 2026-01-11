@@ -8,17 +8,18 @@ import (
 	"io"
 
 	"github.com/udaycmd/hamlet/src/errors"
-	. "github.com/udaycmd/hamlet/src/lexer"
+	"github.com/udaycmd/hamlet/src/lexer"
+	"github.com/udaycmd/hamlet/src/token"
 )
 
 type parser struct {
-	lexer  Lexer
+	lexer  lexer.Lexer
 	Errors []errors.Error
 }
 
 func NewParser(source io.Reader) *parser {
 	// TODO: remove this
-	l := NewLexer(source)
+	l := lexer.NewLexer(source)
 	l.Next()
 
 	return &parser{
@@ -26,19 +27,23 @@ func NewParser(source io.Reader) *parser {
 	}
 }
 
-func (p *parser) curr() Tok {
-	return p.lexer.PrevToken.Kind
+func (p *parser) over() bool {
+	return p.lexer.Token.Kind == token.EOF
+}
+
+func (p *parser) curr() *token.Token {
+	return p.lexer.PrevToken
 }
 
 func (p *parser) advance() {
-	if p.lexer.Token.Kind == EOF {
+	if p.over() {
 		return
 	}
 
 	p.lexer.Next()
 }
 
-func (p *parser) expectNext(expected Tok) bool {
+func (p *parser) expectNext(expected token.Tok) bool {
 	if p.lexer.Token.Kind == expected {
 		p.advance()
 		return true
@@ -48,10 +53,12 @@ func (p *parser) expectNext(expected Tok) bool {
 }
 
 func (p *parser) parseDecl() Decl {
-	switch p.curr() {
-	case FN:
+	curr := p.curr()
+
+	switch curr.Kind {
+	case token.FN:
 		return p.parseFnDecl(false)
-	case EXPORT:
+	case token.EXPORT:
 		return p.parseExportDecl()
 	default:
 		panic("unimplemented")
@@ -60,9 +67,10 @@ func (p *parser) parseDecl() Decl {
 
 func (p *parser) parseExportDecl() Decl {
 	p.advance()
+	curr := p.curr()
 
-	switch p.curr() {
-	case FN:
+	switch curr.Kind {
+	case token.FN:
 		return p.parseFnDecl(true)
 	default:
 		panic("unimplemented")
@@ -72,12 +80,12 @@ func (p *parser) parseExportDecl() Decl {
 func (p *parser) parseFnDecl(exported bool) Decl {
 	decl := FuncDecl{IsExported: exported}
 
-	if !p.expectNext(IDENTIFIER) {
+	if !p.expectNext(token.IDENTIFIER) {
 		// TODO: Better error report!
 		return nil
 	}
 
-	if !p.expectNext(LEFT_PAREN) {
+	if !p.expectNext(token.LEFT_PAREN) {
 		// TODO: Better error report!
 		return nil
 	}
@@ -85,12 +93,12 @@ func (p *parser) parseFnDecl(exported bool) Decl {
 	// TODO: use this in decl above
 	_ = p.parseFnParamDecl()
 
-	if !p.expectNext(ARROW) {
+	if !p.expectNext(token.ARROW) {
 		// TODO: Better error report!
 		return nil
 	}
 
-	if !p.expectNext(LEFT_BRACE) {
+	if !p.expectNext(token.LEFT_BRACE) {
 		// TODO: Better error report!
 		return nil
 	}
@@ -112,18 +120,20 @@ func (p *parser) parseBlockStmt() *BlockStmt {
 
 func (p *parser) parsePrimaryExpr() Expr {
 	var x Expr
+	curr := p.curr()
 
-	switch p.curr() {
-	case TRUE:
-	case FALSE:
-	case EMPTY:
-	case REAL:
-	case INTEGER:
-	case STRING:
-	case CHAR:
-	case LEFT_PAREN:
-		// parse generic expr
-		p.advance() // consume ')'
+	switch curr.Kind {
+	case token.TRUE, token.FALSE, token.EMPTY, token.REAL,
+		token.INTEGER, token.STRING, token.CHAR:
+		x = BasicLit{
+			Lit: *curr,
+		}
+	case token.LEFT_PAREN:
+		// parse expr here
+		// ...
+
+		// expect RPAREN
+		p.expectNext(token.RIGHT_PAREN)
 		x = GroupExpr{}
 	}
 
