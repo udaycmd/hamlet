@@ -2,13 +2,15 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package frontend
+package lexer
 
 import (
 	"bufio"
 	"io"
 	"strings"
 	"unicode"
+
+	"github.com/udaycmd/hamlet/src/errors"
 )
 
 const (
@@ -48,7 +50,7 @@ type (
 		Pos                Position
 		Token, PrevToken   *Token
 		Cursor, PrevCursor uint32
-		Err                Error
+		Err                errors.Error
 		CodePoint          rune
 	}
 )

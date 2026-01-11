@@ -4,11 +4,11 @@
 
 package parser
 
-import "github.com/udaycmd/hamlet/src/frontend"
+import "github.com/udaycmd/hamlet/src/lexer"
 
 type Node interface {
-	Start() frontend.Position
-	End() frontend.Position
+	Start() lexer.Position
+	End() lexer.Position
 }
 
 type (
@@ -66,24 +66,24 @@ type Module struct {
 type (
 	BinaryExpr struct {
 		Rhs Expr
-		Op  frontend.Tok
+		Op  lexer.Tok
 		Lhs Expr
 	}
 
 	UnaryExpr struct {
 		X  Expr
-		Op frontend.Tok
+		Op lexer.Tok
 	}
 
 	GroupExpr struct {
-		lparen frontend.Position
+		lparen lexer.Position
 		X      Expr
-		rparen frontend.Position
+		rparen lexer.Position
 	}
 )
 
 func (e BinaryExpr) exprNode()               {}
 func (e UnaryExpr) exprNode()                {}
 func (e GroupExpr) exprNode()                {}
-func (e GroupExpr) Start() frontend.Position { return e.lparen }
-func (e GroupExpr) End() frontend.Position   { return e.rparen }
+func (e GroupExpr) Start() lexer.Position { return e.lparen }
+func (e GroupExpr) End() lexer.Position   { return e.rparen }

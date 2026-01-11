@@ -7,14 +7,14 @@ package parser
 import (
 	"strings"
 
-	"github.com/udaycmd/hamlet/src/frontend"
+	. "github.com/udaycmd/hamlet/src/lexer"
 )
 
 type Stringer interface {
 	String() string
 }
 
-func parenthesize(op frontend.Tok, expr ...Expr) string {
+func parenthesize(op Tok, expr ...Expr) string {
 	sb := strings.Builder{}
 
 	sb.WriteByte('(')

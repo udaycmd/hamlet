@@ -2,13 +2,14 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package frontend_test
+package lexer_test
 
 import (
 	"strings"
 	"testing"
 
-	. "github.com/udaycmd/hamlet/src/frontend"
+	"github.com/udaycmd/hamlet/src/errors"
+	. "github.com/udaycmd/hamlet/src/lexer"
 )
 
 func lexSingleToken(content string) *Token {
@@ -17,7 +18,7 @@ func lexSingleToken(content string) *Token {
 	return lexer.Token
 }
 
-func lexErrSingleToken(content string) Error {
+func lexErrSingleToken(content string) errors.Error {
 	lexer := NewLexer(strings.NewReader(content))
 	lexer.Next()
 	return lexer.Err

@@ -7,12 +7,13 @@ package parser
 import (
 	"io"
 
-	. "github.com/udaycmd/hamlet/src/frontend"
+	"github.com/udaycmd/hamlet/src/errors"
+	. "github.com/udaycmd/hamlet/src/lexer"
 )
 
 type parser struct {
 	lexer  Lexer
-	Errors []Error
+	Errors []errors.Error
 }
 
 func NewParser(source io.Reader) *parser {
