@@ -118,6 +118,30 @@ func (p *parser) parseBlockStmt() *BlockStmt {
 
 // Expressions
 
+func (p *parser) parseExpr() Expr {
+	return p.parseEqualityExpr()
+}
+ 
+func (p *parser) parseEqualityExpr() Expr {
+	return nil
+}
+
+func (p *parser) parseComparisonExpr() Expr {
+	return nil
+}
+
+func (p *parser) parseTermExpr() Expr {
+	return nil
+}
+
+func (p *parser) parseFactorizedExpr() Expr {
+	return nil
+}
+
+func (p *parser) parseUnaryExpr() Expr {
+	return nil
+}
+
 func (p *parser) parsePrimaryExpr() Expr {
 	var x Expr
 	curr := p.curr()
@@ -129,12 +153,11 @@ func (p *parser) parsePrimaryExpr() Expr {
 			Lit: *curr,
 		}
 	case token.LEFT_PAREN:
-		// parse expr here
-		// ...
+		expr := p.parseExpr()
 
 		// expect RPAREN
 		p.expectNext(token.RIGHT_PAREN)
-		x = GroupExpr{}
+		x = GroupExpr{X: expr}
 	}
 
 	return x
