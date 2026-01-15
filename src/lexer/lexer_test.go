@@ -129,7 +129,7 @@ func TestTokens(t *testing.T) {
 
 		t.Run(tc.str, func(t *testing.T) {
 			if res != tc.kind {
-				t.Errorf("Test case failed because: '%s' != '%s'\n", res, tc.kind)
+				t.Errorf("Test case failed because: Tok.Kind('%s') != Expected.Kind('%s')\n", res, tc.kind)
 			}
 		})
 	}
@@ -139,7 +139,7 @@ func lexChar(t *testing.T, content, expected string) {
 	t.Run(content, func(t *testing.T) {
 		char := lexSingleToken(content).Value
 		if char != expected {
-			t.Errorf("Test case failed because: character('%s') != character('%s')\n", char, expected)
+			t.Errorf("Test case failed because: Tok.character('%s') != Expected.character('%s')\n", char, expected)
 		}
 	})
 }
@@ -148,7 +148,7 @@ func lexErrChar(t *testing.T, content, lexErr string) {
 	t.Run(content, func(t *testing.T) {
 		err := lexErrSingleToken(content).Msg
 		if err != lexErr {
-			t.Errorf("Test case failed because: lexErr(\"%s\") != lexErr(\"%s\")\n", err, lexErr)
+			t.Errorf("Test case failed because: Tok.lexErr(\"%s\") != Expected.lexErr(\"%s\")\n", err, lexErr)
 		}
 	})
 }
@@ -219,7 +219,55 @@ func TestImplicitSemiColon(t *testing.T) {
 
 			for _, kind := range tc.kinds {
 				if lexer.NxtToken.Kind != kind {
-					t.Errorf("Test Case failed because: Tok('%s') != Tok('%s')", lexer.NxtToken.Kind, kind)
+					t.Errorf("Test Case failed because: Tok.Kind('%s') != Expected.Kind('%s')", lexer.NxtToken.Kind, kind)
+				}
+				lexer.Next()
+			}
+		})
+	}
+}
+
+func TestPositions(t *testing.T) {
+	cases := []struct {
+		str       string
+		positions []Position
+	}{
+		{
+			"var x = 1",
+			[]Position{
+				{Line: 0, Column: 1, Offset: 1},
+				{Line: 0, Column: 5, Offset: 5},
+				{Line: 0, Column: 7, Offset: 7},
+				{Line: 0, Column: 9, Offset: 9},
+				{Line: 0, Column: 10, Offset: 9},
+			},
+		},
+		{
+			"\ta",
+			[]Position{
+				{Line: 0, Column: 6, Offset: 2},
+				{Line: 0, Column: 7, Offset: 2},
+			},
+		},
+		{
+			"a\nb",
+			[]Position{
+				{Line: 0, Column: 1, Offset: 1},
+				{Line: 1, Column: 0, Offset: 2},
+				{Line: 1, Column: 1, Offset: 3},
+				{Line: 1, Column: 2, Offset: 3},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.str, func(t *testing.T) {
+			lexer := lexTokens(tc.str)
+			lexer.Next()
+
+			for _, pos := range tc.positions {
+				if lexer.NxtToken.Pos != pos {
+					t.Errorf("Test Case failed because: Pos(%v) != Expected(%v). Token: %s", lexer.NxtToken.Pos, pos, lexer.NxtToken.Kind)
 				}
 				lexer.Next()
 			}

@@ -299,3 +299,7 @@ func IsKeyword(name string) Tok {
 
 	return IDENTIFIER
 }
+
+func InvalidToken() *Token {
+	return &Token{Value: INVALID.String(), Kind: INVALID, Pos: InvalidPos}
+}

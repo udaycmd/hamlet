@@ -6,6 +6,7 @@ package lexer
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"strings"
 	"unicode"
@@ -85,8 +86,8 @@ func NewLexer(file io.Reader) Lexer {
 	return Lexer{
 		Reader:   bufio.NewReaderSize(file, maxLexBufSize),
 		Buf:      &strings.Builder{},
-		Token:    &Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos},
-		NxtToken: &Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos},
+		Token:    InvalidToken(),
+		NxtToken: InvalidToken(),
 		Pos:      InvalidPos,
 	}
 }
@@ -97,7 +98,7 @@ func (l *Lexer) step() {
 
 	codePoint, width, err := l.Reader.ReadRune()
 	if err != nil && err != io.EOF {
-		return
+		panic(fmt.Sprintf("unexpected error: %v\n", err))
 	}
 
 	if width == 0 {
@@ -127,7 +128,7 @@ func (l *Lexer) back() {
 
 	err := l.Reader.UnreadRune()
 	if err != nil {
-		return
+		panic(fmt.Sprintf("unexpected error: %v\n", err))
 	}
 
 	l.Pos = l.PrevPos
@@ -363,7 +364,7 @@ func (l *Lexer) lexNl() Tok {
 
 func (l *Lexer) Next() {
 	l.Token = l.NxtToken
-	t := &Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos}
+	t := InvalidToken()
 
 	// skip whitespaces and comments
 	l.lexWhiteSpaceAndComment()
