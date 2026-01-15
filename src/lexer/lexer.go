@@ -85,8 +85,8 @@ func NewLexer(file io.Reader) Lexer {
 	return Lexer{
 		Reader:   bufio.NewReaderSize(file, maxLexBufSize),
 		Buf:      &strings.Builder{},
-		Token:    &InvalidToken,
-		NxtToken: &InvalidToken,
+		Token:    &Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos},
+		NxtToken: &Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos},
 		Pos:      InvalidPos,
 	}
 }
@@ -363,7 +363,7 @@ func (l *Lexer) lexNl() Tok {
 
 func (l *Lexer) Next() {
 	l.Token = l.NxtToken
-	t := InvalidToken
+	t := &Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos}
 
 	// skip whitespaces and comments
 	l.lexWhiteSpaceAndComment()
@@ -605,5 +605,5 @@ func (l *Lexer) Next() {
 	}
 
 	t.Pos = tokenStart
-	l.NxtToken = &t
+	l.NxtToken = t
 }
