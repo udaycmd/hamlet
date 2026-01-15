@@ -32,7 +32,7 @@ func (p *parser) over() bool {
 }
 
 func (p *parser) curr() *token.Token {
-	return p.lexer.PrevToken
+	return p.lexer.Token
 }
 
 func (p *parser) advance() {
@@ -121,7 +121,7 @@ func (p *parser) parseBlockStmt() *BlockStmt {
 func (p *parser) parseExpr() Expr {
 	return p.parseEqualityExpr()
 }
- 
+
 func (p *parser) parseEqualityExpr() Expr {
 	return nil
 }

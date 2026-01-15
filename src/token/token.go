@@ -100,6 +100,10 @@ const (
 	STRING
 )
 
+var (
+	InvalidToken = Token{Kind: INVALID, Value: INVALID.String(), Pos: InvalidPos}
+)
+
 var keywords = map[string]Tok{
 	"break":     BREAK,
 	"case":      CASE,

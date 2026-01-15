@@ -16,7 +16,7 @@ import (
 func lexSingleToken(content string) *Token {
 	lexer := NewLexer(strings.NewReader(content))
 	lexer.Next()
-	return lexer.Token
+	return lexer.NxtToken
 }
 
 func lexErrSingleToken(content string) errors.Error {
@@ -125,11 +125,11 @@ func TestTokens(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		res := lexSingleToken(tc.str)
+		res := lexSingleToken(tc.str).Kind
 
 		t.Run(tc.str, func(t *testing.T) {
-			if res.Kind != tc.kind {
-				t.Errorf("Test case failed because: '%s' != '%s'\n", res.Kind, tc.kind)
+			if res != tc.kind {
+				t.Errorf("Test case failed because: '%s' != '%s'\n", res, tc.kind)
 			}
 		})
 	}
@@ -218,8 +218,8 @@ func TestImplicitSemiColon(t *testing.T) {
 			lexer.Next()
 
 			for _, kind := range tc.kinds {
-				if lexer.Token.Kind != kind {
-					t.Errorf("Test Case failed because: Tok('%s') != Tok('%s')", lexer.Token.Kind, kind)
+				if lexer.NxtToken.Kind != kind {
+					t.Errorf("Test Case failed because: Tok('%s') != Tok('%s')", lexer.NxtToken.Kind, kind)
 				}
 				lexer.Next()
 			}

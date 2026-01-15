@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	maxLexBufSize = 16 * 1024 // 16 Kilobytes
-	eof           = rune(-1)  // eof
+	maxLexBufSize = 8 * 1024 // 8 Kilobytes
+	eof           = rune(-1) // eof
 )
 
 var (
@@ -34,13 +34,12 @@ type (
 	Radix uint8
 
 	Lexer struct {
-		F                  *bufio.Reader
-		Buf                *strings.Builder
-		Pos                Position
-		Token, PrevToken   *Token
-		Cursor, PrevCursor uint32
-		Err                errors.Error
-		CodePoint          rune
+		Reader          *bufio.Reader
+		Buf             *strings.Builder
+		Pos, PrevPos    Position
+		Token, NxtToken *Token
+		Err             errors.Error
+		CodePoint       rune
 	}
 )
 
@@ -84,21 +83,21 @@ func isIdentContinue(r rune) bool {
 
 func NewLexer(file io.Reader) Lexer {
 	return Lexer{
-		F:         bufio.NewReaderSize(file, maxLexBufSize),
-		Buf:       &strings.Builder{},
-		Token:     &Token{Kind: INVALID},
-		PrevToken: &Token{Kind: INVALID},
-		Pos:       Position{Line: 1, Column: 1},
+		Reader:   bufio.NewReaderSize(file, maxLexBufSize),
+		Buf:      &strings.Builder{},
+		Token:    &InvalidToken,
+		NxtToken: &InvalidToken,
+		Pos:      InvalidPos,
 	}
 }
 
-// Forwards the [Lexer.F] by one rune.
+// Forwards the [Lexer.Reader] by one rune.
 func (l *Lexer) step() {
-	l.PrevCursor = l.Cursor
+	l.PrevPos = l.Pos
 
-	codePoint, width, err := l.F.ReadRune()
+	codePoint, width, err := l.Reader.ReadRune()
 	if err != nil && err != io.EOF {
-		panic("hamlet_crash: " + err.Error())
+		return
 	}
 
 	if width == 0 {
@@ -116,23 +115,22 @@ func (l *Lexer) step() {
 	}
 
 	l.CodePoint = codePoint
-	l.Cursor += uint32(width)
+	l.Pos.Offset += width
 }
 
-// Back tracks the [Lexer.F] by one rune.
+// Back tracks the [Lexer.Reader] by one rune.
 // Do not call twice without a [Lexer.step] in between.
 func (l *Lexer) back() {
 	if l.CodePoint == eof {
 		return
 	}
 
-	err := l.F.UnreadRune()
+	err := l.Reader.UnreadRune()
 	if err != nil {
-		panic("hamlet_crash: " + err.Error())
+		return
 	}
 
-	l.Pos = l.PrevToken.Pos
-	l.Cursor = l.PrevCursor
+	l.Pos = l.PrevPos
 }
 
 func (l *Lexer) lexIdent() (string, string) {
@@ -328,7 +326,7 @@ func (l *Lexer) lexNum() (Tok, string) {
 }
 
 func (l *Lexer) lexWhiteSpaceAndComment() {
-	if l.Cursor == 0 {
+	if l.Pos.Offset == 0 {
 		l.step()
 	}
 
@@ -352,7 +350,7 @@ func (l *Lexer) lexWhiteSpaceAndComment() {
 func (l *Lexer) lexNl() Tok {
 	tok := EOL
 
-	switch l.PrevToken.Kind {
+	switch l.Token.Kind {
 	case BREAK, CONTINUE, RETURN, RIGHT_PAREN, RIGHT_BRACKET, QUESTION,
 		RIGHT_BRACE, CARET, IDENTIFIER, INTEGER, REAL, CHAR, STRING:
 		tok = IMPLICIT_SEMICOLON
@@ -364,15 +362,18 @@ func (l *Lexer) lexNl() Tok {
 }
 
 func (l *Lexer) Next() {
-	l.PrevToken = l.Token
-	t := &Token{Kind: INVALID}
+	l.Token = l.NxtToken
+	t := InvalidToken
 
 	// skip whitespaces and comments
 	l.lexWhiteSpaceAndComment()
 
+	tokenStart := l.Pos
+
 	switch l.CodePoint {
 	case eof:
 		t.Kind = EOF
+		t.Value = "eof"
 	case '+':
 		l.step()
 		if l.CodePoint == '=' {
@@ -603,5 +604,6 @@ func (l *Lexer) Next() {
 		}
 	}
 
-	l.Token = t
+	t.Pos = tokenStart
+	l.NxtToken = &t
 }

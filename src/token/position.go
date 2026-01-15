@@ -12,6 +12,10 @@ type Position struct {
 	Offset int
 }
 
+var (
+	InvalidPos = Position{Line: 0, Column: 0, Offset: 0}
+)
+
 func (p Position) String() string {
 	return fmt.Sprintf("%d:%d", p.Line, p.Column) // line:column
 }
