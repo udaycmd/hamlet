@@ -235,27 +235,27 @@ func TestPositions(t *testing.T) {
 		{
 			"var x = 1",
 			[]Position{
-				{Line: 0, Column: 1, Offset: 1},
-				{Line: 0, Column: 5, Offset: 5},
-				{Line: 0, Column: 7, Offset: 7},
-				{Line: 0, Column: 9, Offset: 9},
-				{Line: 0, Column: 10, Offset: 9},
+				{Line: 1, Column: 1, Offset: 0},
+				{Line: 1, Column: 5, Offset: 4},
+				{Line: 1, Column: 7, Offset: 6},
+				{Line: 1, Column: 9, Offset: 8},
+				{Line: 1, Column: 10, Offset: 9},
 			},
 		},
 		{
 			"\ta",
 			[]Position{
-				{Line: 0, Column: 6, Offset: 2},
-				{Line: 0, Column: 7, Offset: 2},
+				{Line: 1, Column: 5, Offset: 1},
+				{Line: 1, Column: 6, Offset: 2},
 			},
 		},
 		{
 			"a\nb",
 			[]Position{
-				{Line: 0, Column: 1, Offset: 1},
-				{Line: 1, Column: 0, Offset: 2},
-				{Line: 1, Column: 1, Offset: 3},
-				{Line: 1, Column: 2, Offset: 3},
+				{Line: 1, Column: 1, Offset: 0},
+				{Line: 1, Column: 2, Offset: 1},
+				{Line: 2, Column: 1, Offset: 2},
+				{Line: 2, Column: 2, Offset: 3},
 			},
 		},
 	}
@@ -267,7 +267,7 @@ func TestPositions(t *testing.T) {
 
 			for _, pos := range tc.positions {
 				if lexer.NxtToken.Pos != pos {
-					t.Errorf("Test Case failed because: Pos(%v) != Expected(%v). Token: %s", lexer.NxtToken.Pos, pos, lexer.NxtToken.Kind)
+					t.Errorf("Test Case failed because: Tok.Pos('%s') != Expected.Pos('%s')", lexer.NxtToken.Pos, pos)
 				}
 				lexer.Next()
 			}

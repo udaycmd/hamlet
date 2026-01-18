@@ -7,16 +7,15 @@ package token
 type Tok uint8
 
 type Token struct {
-	Value string
-	Kind  Tok
-	Pos   Position
+	Lit  string
+	Kind Tok
+	Pos  Position
 }
 
 const (
 	EOF Tok = iota
 	INVALID
-	EOL
-	IMPLICIT_SEMICOLON
+	COMMENT
 
 	// - Keywords -
 	BREAK
@@ -65,7 +64,6 @@ const (
 	NOT_EQ_BIT
 	LSHIFT_EQ
 	RSHIFT_EQ
-	WALRUS
 	EQUAL
 	AND
 	OR
@@ -133,8 +131,8 @@ func (t Tok) String() string {
 		s = "eof"
 	case INVALID:
 		s = "invalid"
-	case EOL, IMPLICIT_SEMICOLON:
-		s = "newline"
+	case COMMENT:
+		s = "comment"
 	case BREAK:
 		s = "break"
 	case CASE:
@@ -223,8 +221,6 @@ func (t Tok) String() string {
 		s = "<<="
 	case RSHIFT_EQ:
 		s = ">>="
-	case WALRUS:
-		s = ":="
 	case EQUAL:
 		s = "="
 	case AND:
@@ -288,18 +284,10 @@ func (t Tok) String() string {
 	return s
 }
 
-func (t Tok) IsNumber() bool {
-	return t == INTEGER || t == REAL
-}
-
 func IsKeyword(name string) Tok {
 	if kw, ok := keywords[name]; ok {
 		return kw
 	}
 
 	return IDENTIFIER
-}
-
-func InvalidToken() *Token {
-	return &Token{Value: INVALID.String(), Kind: INVALID, Pos: InvalidPos}
 }

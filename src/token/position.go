@@ -4,18 +4,15 @@
 
 package token
 
-import "fmt"
+// [Position] represents a position in the SourceManager.
+type Position int
 
-type Position struct {
-	Line   int
-	Column int
-	Offset int
-}
-
-var (
-	InvalidPos = Position{Line: 0, Column: 0, Offset: 0}
+const (
+	InvalidPos Position = 0
 )
 
-func (p Position) String() string {
-	return fmt.Sprintf("%d:%d", p.Line, p.Column) // line:column
+// returns true if position is valid
+func (p Position) IsValid() bool {
+	return p != InvalidPos
 }
+

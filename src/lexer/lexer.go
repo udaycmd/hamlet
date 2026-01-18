@@ -5,606 +5,544 @@
 package lexer
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
-	"github.com/udaycmd/hamlet/src/errors"
-	. "github.com/udaycmd/hamlet/src/token"
+	"github.com/udaycmd/hamlet/src/token"
 )
 
 const (
-	maxLexBufSize = 8 * 1024 // 8 Kilobytes
-	eof           = rune(-1) // eof
+	eof = rune(-1) // eof
+	bom = rune(0xFEFF)
 )
 
 var (
-	ErrUnexpectedUnicodeChar    = "unexpected unicode codepoint"
-	ErrUnterminatedStrLiteral   = "unterminated string literal"
-	ErrUnterminatedCharLiteral  = "unterminated character literal"
-	ErrEmptyCharLiteral         = "zero width character literal encountered"
-	ErrCharLiteralTooWide       = "character literal too wide"
-	ErrNoDigitsAfterBasePrefix  = "expected digit(s) after base prefix"
-	ErrNoDigitAfterDecimalPoint = "expected digit(s) after decimal point"
-	ErrNoDigitAfterExponent     = "expected digit(s) after exponent"
+	ErrUnexpectedNullChar      = "unexpected NULL character"
+	ErrUnexpectedUnicodeChar   = "unexpected unicode codepoint"
+	ErrIllegalBOM              = "illegal byte order mark"
+	ErrUnterminatedStrLiteral  = "unterminated string literal"
+	ErrUnterminatedCharLiteral = "unterminated character literal"
+	ErrUnterminatedEscapeSeq   = "unterminated escape sequence"
+	ErrUnknownEscapeSeq        = "unknown escape sequence"
+	ErrIllegalUnicodeEscape    = "illegal unicode escape inside byte sequence"
+	ErrEmptyCharLiteral        = "zero width character literal encountered"
+	ErrCharLiteralTooWide      = "character literal too wide"
+	ErrNoDigitAfterExponent    = "expected digit(s) after exponent"
 )
 
 type (
-	Radix uint8
+	ErrorHandler func(message string, pos token.Position)
 
+	// Based upon Go's [scanner] package
+	//
+	// [scanner]: https://github.com/golang/go/blob/master/src/go/scanner/scanner.go
 	Lexer struct {
-		Reader          *bufio.Reader
-		Buf             *strings.Builder
-		Pos, PrevPos    Position
-		Token, NxtToken *Token
-		Err             errors.Error
-		CodePoint       rune
+		file *token.SourceHandle // source file handle
+		err  ErrorHandler
+		path string // abs path of file
+
+		src      []byte // actual source
+		cc       rune   // current character
+		offset   int    // cc's offset in source
+		rdOffset int    // position after current char
+		asi      bool   // enable automatic semicolon insertion
+		comment  bool   // enable comment parsing
 	}
 )
 
-const (
-	base2 Radix = iota
-	base8
-	base10
-	base16
-)
-
-func isHexDigit(r rune) bool {
-	return unicode.Is(unicode.ASCII_Hex_Digit, r)
-}
-
-func isDigit(r rune, base Radix) bool {
-	switch base {
-	case base2:
-		return r == '0' || r == '1'
-	case base8:
-		return r >= '0' && r <= '7'
-	case base10:
-		return unicode.IsDigit(r)
-	case base16:
-		return isHexDigit(r)
+func NewLexer(file *token.SourceHandle, src []byte, err ErrorHandler) *Lexer {
+	if file.Len != len(src) {
+		panic(fmt.Sprintf("file size %d does not match with source length %d", file.Len, len(src)))
 	}
 
-	return false
+	l := &Lexer{
+		file: file,
+		src:  src,
+		err:  err,
+		cc:   ' ',
+	}
+
+	l.next()
+	if l.cc == bom {
+		l.next() // skip BOM
+	}
+
+	return l
 }
 
-func isWhitespace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\r'
+func isDigit(r rune) bool {
+	return ('0' <= r && r <= '9') || (r >= utf8.RuneSelf && unicode.IsDigit(r))
 }
 
-func isIdentStart(r rune) bool {
-	return r == '$' || r == '_' || unicode.IsLetter(r)
+func digitVal(ch rune) int {
+	switch {
+	case '0' <= ch && ch <= '9':
+		return int(ch - '0')
+	case 'a' <= ch && ch <= 'f':
+		return int(ch - 'a' + 10)
+	case 'A' <= ch && ch <= 'F':
+		return int(ch - 'A' + 10)
+	}
+	return 16
 }
 
-func isIdentContinue(r rune) bool {
-	return isIdentStart(r) || isDigit(r, base10)
+func isLetter(r rune) bool {
+	return 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' || r == '_' || (r >= utf8.RuneSelf && unicode.IsLetter(r))
 }
 
-func NewLexer(file io.Reader) Lexer {
-	return Lexer{
-		Reader:   bufio.NewReaderSize(file, maxLexBufSize),
-		Buf:      &strings.Builder{},
-		Token:    InvalidToken(),
-		NxtToken: InvalidToken(),
-		Pos:      InvalidPos,
+func (l *Lexer) peek() byte {
+	if l.rdOffset < len(l.src) {
+		return l.src[l.rdOffset]
+	}
+
+	return 0
+}
+
+func (l *Lexer) skipWhitespace() {
+	for l.cc == ' ' || l.cc == '\t' || l.cc == '\r' || (l.cc == '\n' && !l.asi) {
+		l.next()
 	}
 }
 
-// Forwards the [Lexer.Reader] by one rune.
-func (l *Lexer) step() {
-	l.PrevPos = l.Pos
+func (l *Lexer) error(offset int, msg string) {
+	if l.err != nil {
+		l.err(msg, l.file.TapePos(offset))
+	}
+}
 
-	codePoint, width, err := l.Reader.ReadRune()
-	if err != nil && err != io.EOF {
-		panic(fmt.Sprintf("unexpected error: %v\n", err))
+func (l *Lexer) lexIdent() string {
+	offset := l.offset
+	for isLetter(l.cc) || isDigit(l.cc) {
+		l.next()
 	}
 
-	if width == 0 {
-		codePoint = eof
+	return string(l.src[offset:l.offset])
+}
+
+func (l *Lexer) lexDigitSeq(base int) {
+	for l.cc == '_' || digitVal(l.cc) < base {
+		l.next()
+	}
+}
+
+func (l *Lexer) lexNum() (tok token.Tok, lit string) {
+	tok = token.INTEGER
+	offset := l.offset
+	base := 10
+
+	switch peek := strings.ToLower(string(l.peek())); {
+	case l.cc == '0' && peek == "b":
+		base = 2
+		l.next()
+		l.next()
+	case l.cc == '0' && peek == "o":
+		base = 8
+		l.next()
+		l.next()
+	case l.cc == '0' && peek == "x":
+		base = 16
+		l.next()
+		l.next()
 	}
 
-	if codePoint == '\n' {
-		l.Pos.Line++
-		l.Pos.Column = 0
-	} else {
-		if codePoint == '\t' {
-			l.Pos.Column += 4
+	// lex whole number
+	l.lexDigitSeq(base)
+
+	// lex fractional
+	if l.cc == '.' && base == 10 {
+		tok = token.REAL
+		l.next()
+		l.lexDigitSeq(base)
+	}
+
+	// lex exponent
+	if l.cc == 'e' || l.cc == 'E' {
+		tok = token.REAL
+		l.next()
+
+		// lex exponent sign
+		if l.cc == '-' || l.cc == '+' {
+			l.next()
 		}
-		l.Pos.Column++
-	}
 
-	l.CodePoint = codePoint
-	l.Pos.Offset += width
-}
+		offset := l.offset
+		l.lexDigitSeq(10)
 
-// Back tracks the [Lexer.Reader] by one rune.
-// Do not call twice without a [Lexer.step] in between.
-func (l *Lexer) back() {
-	if l.CodePoint == eof {
-		return
-	}
-
-	err := l.Reader.UnreadRune()
-	if err != nil {
-		panic(fmt.Sprintf("unexpected error: %v\n", err))
-	}
-
-	l.Pos = l.PrevPos
-}
-
-func (l *Lexer) lexIdent() (string, string) {
-	l.Buf.Reset()
-
-	for isIdentContinue(l.CodePoint) {
-		_, err := l.Buf.WriteRune(l.CodePoint)
-		if err != nil {
-			return l.Buf.String(), err.Error()
+		if offset == l.offset {
+			l.error(offset, ErrNoDigitAfterExponent)
 		}
-		l.step()
 	}
 
-	return l.Buf.String(), ""
+	return tok, string(l.src[offset:l.offset])
 }
 
-// [Lexer.lexStr] only identifies any lexical error while scanning a string literal.
-// It does not do any kind of string validation and parsing.
+func (l *Lexer) lexEscape(quote rune) bool {
+	offset := l.offset
+
+	var n int
+	var base, max uint32
+
+	switch l.cc {
+	case 'a', 'b', 'f', 'n', 'r', 't', 'v', '\\', quote:
+		l.next()
+		return true
+	case 'x':
+		l.next()
+		n, base, max = 2, 16, 255
+	case 'u':
+		l.next()
+		n, base, max = 4, 16, unicode.MaxRune
+	case 'U':
+		l.next()
+		n, base, max = 8, 16, unicode.MaxRune
+	default:
+		msg := ErrUnknownEscapeSeq
+		if l.cc == eof {
+			msg = ErrUnterminatedEscapeSeq
+		}
+		l.error(offset, msg)
+		return false
+	}
+
+	var x uint32 = 0
+	for n > 0 {
+		d := uint32(digitVal(l.cc))
+		if d >= base {
+			msg := ErrIllegalUnicodeEscape
+			if l.cc == eof {
+				msg = ErrUnterminatedEscapeSeq
+			}
+
+			l.error(l.offset, msg)
+			return false
+		}
+
+		x = x*base + d
+		n--
+	}
+
+	if x > max || 0xD800 <= x && x < 0xE000 {
+		l.error(offset, ErrIllegalUnicodeEscape)
+		return false
+	}
+
+	return true
+}
+
 func (l *Lexer) lexStr() string {
-	// skip the starting `"`
-	l.step()
+	offset := l.offset - 1 // opening '"' already consumed
 
-	// skip the ending `"`
-	defer l.step()
-
-	l.Buf.Reset()
-
-	for l.CodePoint != '"' {
-		if l.CodePoint == eof {
-			return ErrUnterminatedStrLiteral
+	for {
+		c := l.cc
+		if c == '\n' || c < 0 {
+			l.error(offset, ErrUnterminatedStrLiteral)
+			break
 		}
-
-		if l.CodePoint == unicode.ReplacementChar {
-			return ErrUnexpectedUnicodeChar
+		l.next()
+		if c == '"' {
+			break
 		}
-
-		_, err := l.Buf.WriteRune(l.CodePoint)
-		if err != nil {
-			return err.Error()
+		if c == '\\' {
+			l.lexEscape('"')
 		}
-		l.step()
 	}
 
-	return l.Buf.String()
+	return string(l.src[offset:l.offset])
 }
 
 func (l *Lexer) lexChar() string {
-	// skip the starting `'`
-	l.step()
+	offset := l.offset - 1 // opening '\'' already consumed
 
-	// skip the ending `'`
-	defer l.step()
+	valid := true
+	n := 0
 
-	l.Buf.Reset()
-	charCount := 0
-	for l.CodePoint != '\'' {
-		if l.CodePoint == eof {
-			return ErrUnterminatedCharLiteral
+	for {
+		c := l.cc
+		if c == '\n' || c == eof {
+			// only report error if we don't have one already
+			if valid {
+				l.error(offset, ErrUnterminatedCharLiteral)
+				valid = false
+			}
+			break
 		}
-
-		if l.CodePoint == unicode.ReplacementChar {
-			return ErrUnexpectedUnicodeChar
+		l.next()
+		if c == '\'' {
+			if n == 0 {
+				l.error(offset, ErrEmptyCharLiteral)
+				valid = false
+			}
+			break
 		}
-
-		_, err := l.Buf.WriteRune(l.CodePoint)
-		if err != nil {
-			return err.Error()
+		n++
+		if c == '\\' {
+			valid = l.lexEscape('\'')
 		}
-
-		charCount++
-		l.step()
+		// continue to read until closing quote
 	}
 
-	if l.Buf.Len() == 0 {
-		return ErrEmptyCharLiteral
+	if valid && n != 1 {
+		l.error(offset, ErrCharLiteralTooWide)
 	}
 
-	if !(l.Buf.Len() <= 4 && charCount == 1) {
-		return ErrCharLiteralTooWide
-	}
-
-	return ""
+	return string(l.src[offset:l.offset])
 }
 
-func (l *Lexer) lexDigitSeq(base Radix) string {
-	for isDigit(l.CodePoint, base) || l.CodePoint == '_' {
-		_, err := l.Buf.WriteRune(l.CodePoint)
-		if err != nil {
-			return err.Error()
-		}
-		l.step()
+func (l *Lexer) lexComment() string {
+	offset := l.offset - 1 // '#' already consumed
+
+	for l.cc != '\n' && l.cc >= 0 {
+		l.next()
 	}
 
-	return ""
+	return string(l.src[offset:l.offset])
 }
 
-// Parse a number (int or real) and return it as string or a parse error.
-// Referenced from [umka-lang].
-//
-// [umka-lang]: https://github.com/vtereshkov/umka-lang.git
-func (l *Lexer) lexNum() (Tok, string) {
-	l.Buf.Reset()
-	base := base10
-	isReal := false
+// forwards the [Lexer.offset] and [Lexer.rdOffset]
+func (l *Lexer) next() {
+	if l.rdOffset < len(l.src) {
+		l.offset = l.rdOffset
 
-	if l.CodePoint == '0' {
-		_, err := l.Buf.WriteRune(l.CodePoint)
-		if err != nil {
-			return INVALID, err.Error()
+		if l.cc == '\n' {
+			l.file.AddLine(l.offset)
 		}
 
-		l.step()
-		nbase := base10
-		switch l.CodePoint {
-		case 'x', 'X':
-			nbase = base16
-		case 'o', 'O':
-			nbase = base8
-		case 'b', 'B':
-			nbase = base2
-		}
+		r, w := rune(l.src[l.rdOffset]), 1
+		switch {
+		case r == 0:
+			l.error(l.offset, ErrUnexpectedNullChar)
+		case r >= utf8.RuneSelf:
+			r, w = utf8.DecodeRune(l.src[l.rdOffset:])
 
-		if nbase != base10 {
-			base = nbase
-			_, err := l.Buf.WriteRune(l.CodePoint)
-			if err != nil {
-				return INVALID, err.Error()
-			}
-
-			l.step()
-			if !isDigit(l.CodePoint, base) {
-				return INVALID, ErrNoDigitsAfterBasePrefix
-			}
-		}
-	}
-
-	l.lexDigitSeq(base)
-
-	if base != base10 {
-		return INTEGER, ""
-	}
-
-	if l.CodePoint == '.' {
-		l.step()
-
-		// found `..` (range) operator
-		if l.CodePoint == '.' {
-			l.back()
-			return INTEGER, ""
-		}
-
-		isReal = true
-		_, err := l.Buf.WriteRune('.')
-		if err != nil {
-			return INVALID, ""
-		}
-
-		if !isDigit(l.CodePoint, base10) {
-			return INVALID, ErrNoDigitAfterDecimalPoint
-		}
-
-		l.lexDigitSeq(base10)
-	}
-
-	if l.CodePoint == 'e' || l.CodePoint == 'E' {
-		isReal = true
-		_, err := l.Buf.WriteRune(l.CodePoint)
-		if err != nil {
-			return INVALID, ""
-		}
-
-		l.step()
-		if l.CodePoint == '+' || l.CodePoint == '-' {
-			_, err := l.Buf.WriteRune(l.CodePoint)
-			if err != nil {
-				return INVALID, ""
-			}
-			l.step()
-		}
-
-		if !isDigit(l.CodePoint, base10) {
-			return INVALID, ErrNoDigitAfterExponent
-		}
-
-		l.lexDigitSeq(base10)
-	}
-
-	if isReal {
-		return REAL, ""
-	}
-
-	return INTEGER, ""
-}
-
-func (l *Lexer) lexWhiteSpaceAndComment() {
-	if l.Pos.Offset == 0 {
-		l.step()
-	}
-
-	for isWhitespace(l.CodePoint) || l.CodePoint == '#' {
-		if l.CodePoint == '#' {
-			for l.CodePoint != '\n' && l.CodePoint != eof {
-				l.step()
+			if r == utf8.RuneError && w == 1 {
+				l.error(l.offset, ErrUnexpectedUnicodeChar)
+			} else if r == bom && l.offset > 0 {
+				l.error(l.offset, ErrIllegalBOM)
 			}
 		}
 
-		// check for IMPLICIT_SEMICOLON or a regular EOL in Next()
-		if l.CodePoint == '\n' {
-			return
+		l.rdOffset += w
+		l.cc = r
+	} else {
+		l.offset = len(l.src)
+		if l.cc == '\n' {
+			l.file.AddLine(l.offset)
 		}
 
-		// consume EOF
-		l.step()
+		l.cc = eof
 	}
 }
 
-func (l *Lexer) lexNl() Tok {
-	tok := EOL
+func (l *Lexer) Lex() (tok token.Tok, lit string, pos token.Position) {
+	l.skipWhitespace()
 
-	switch l.Token.Kind {
-	case BREAK, CONTINUE, RETURN, RIGHT_PAREN, RIGHT_BRACKET, QUESTION,
-		RIGHT_BRACE, CARET, IDENTIFIER, INTEGER, REAL, CHAR, STRING:
-		tok = IMPLICIT_SEMICOLON
-	}
+	// calculate tape position
+	pos = l.file.TapePos(l.offset)
 
-	// just skip the '\n'
-	l.step()
-	return tok
-}
+	asi := false
 
-func (l *Lexer) Next() {
-	l.Token = l.NxtToken
-	t := InvalidToken()
-
-	// skip whitespaces and comments
-	l.lexWhiteSpaceAndComment()
-
-	tokenStart := l.Pos
-
-	switch l.CodePoint {
-	case eof:
-		t.Kind = EOF
-		t.Value = "eof"
-	case '+':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = PLUS_EQ
-		} else {
-			l.back()
-			t.Kind = PLUS
+	switch c := l.cc; {
+	case isLetter(c):
+		lit = l.lexIdent()
+		tok = token.IsKeyword(lit)
+		switch tok {
+		case token.BREAK, token.CONTINUE, token.RETURN, token.IDENTIFIER,
+			token.TRUE, token.FALSE, token.EMPTY:
+			asi = true
 		}
-		l.step()
-	case '-':
-		l.step()
-		switch l.CodePoint {
-		case '=':
-			t.Kind = MINUS_EQ
-		case '>':
-			t.Kind = ARROW
-		default:
-			l.back()
-			t.Kind = MINUS
-		}
-		l.step()
-	case '*':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = STAR_EQ
-		} else {
-			l.back()
-			t.Kind = STAR
-		}
-		l.step()
-	case '/':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = SLASH_EQ
-		} else {
-			l.back()
-			t.Kind = SLASH
-		}
-		l.step()
-	case '%':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = PERCENT_EQ
-		} else {
-			l.back()
-			t.Kind = PERCENT
-		}
-		l.step()
-	case '&':
-		l.step()
-		switch l.CodePoint {
-		case '=':
-			t.Kind = AND_EQ
-		case '&':
-			t.Kind = AND
-		default:
-			l.back()
-			t.Kind = AMPERSAND
-		}
-		l.step()
-	case '|':
-		l.step()
-		switch l.CodePoint {
-		case '=':
-			t.Kind = OR_EQ
-		case '|':
-			t.Kind = OR
-		default:
-			l.back()
-			t.Kind = PIPE
-		}
-		l.step()
-	case '~':
-		l.step()
-		switch l.CodePoint {
-		case '=':
-			t.Kind = NOT_EQ_BIT
-		default:
-			l.back()
-			t.Kind = TILDE
-		}
-		l.step()
-	case '=':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = EQUAL_EQUAL
-		} else {
-			l.back()
-			t.Kind = EQUAL
-		}
-		l.step()
-	case '!':
-		l.step()
-		if l.CodePoint == '=' {
-			t.Kind = BANG_EQ
-		} else {
-			l.back()
-			t.Kind = BANG
-		}
-		l.step()
-	case '.':
-		l.step()
-		if l.CodePoint == '.' {
-			t.Kind = DOT_DOT
-		} else {
-			l.back()
-			t.Kind = DOT
-		}
-		l.step()
-	case ':':
-		l.step()
-		switch l.CodePoint {
-		case ':':
-			t.Kind = DOUBLE_COLON
-		case '=':
-			t.Kind = WALRUS
-		default:
-			l.back()
-			t.Kind = COLON
-		}
-		l.step()
-	case '<':
-		l.step()
-		switch l.CodePoint {
-		case '<':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = LSHIFT_EQ
-			} else {
-				l.back()
-				t.Kind = LEFT_SHIFT
-			}
-		case '=':
-			t.Kind = LESS_EQ
-		default:
-			l.back()
-			t.Kind = LESS
-		}
-		l.step()
-	case '>':
-		l.step()
-		switch l.CodePoint {
-		case '>':
-			l.step()
-			if l.CodePoint == '=' {
-				t.Kind = RSHIFT_EQ
-			} else {
-				l.back()
-				t.Kind = RIGHT_SHIFT
-			}
-		case '=':
-			t.Kind = GREATER_EQ
-		default:
-			l.back()
-			t.Kind = GREATER
-		}
-		l.step()
-	case '^':
-		t.Kind = CARET
-		l.step()
-	case '?':
-		t.Kind = QUESTION
-		l.step()
-	case '(':
-		t.Kind = LEFT_PAREN
-		l.step()
-	case ')':
-		t.Kind = RIGHT_PAREN
-		l.step()
-	case '[':
-		t.Kind = LEFT_BRACKET
-		l.step()
-	case ']':
-		t.Kind = RIGHT_BRACKET
-		l.step()
-	case '{':
-		t.Kind = LEFT_BRACE
-		l.step()
-	case '}':
-		t.Kind = RIGHT_BRACE
-		l.step()
-	case ',':
-		t.Kind = COMMA
-		l.step()
-	case ';':
-		t.Kind = SEMICOLON
-		l.step()
-	case '"':
-		es := l.lexStr()
-		if es != "" {
-			l.Err.Msg = es
-		}
-
-		t.Kind = STRING
-		t.Value = l.Buf.String()
-	case '\'':
-		es := l.lexChar()
-		if es != "" {
-			l.Err.Msg = es
-		}
-
-		t.Kind = CHAR
-		t.Value = l.Buf.String()
-	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		kind, es := l.lexNum()
-		if es != "" {
-			l.Err.Msg = es
-		}
-
-		t.Kind = kind
-		t.Value = l.Buf.String()
-	case '\n':
-		t.Kind = l.lexNl()
+	case ('0' <= c && c <= '9') || (c == '.' && '0' <= l.peek() && l.peek() <= '9'):
+		asi = true
+		tok, lit = l.lexNum()
 	default:
-		if isIdentStart(l.CodePoint) { // identifiers
-			name, err := l.lexIdent()
-			if err != "" {
-				l.Err.Msg = err
+		l.next()
+
+		switch c {
+		case eof:
+			if l.asi {
+				asi = false // eof consumed
+				return token.SEMICOLON, "\n", pos
 			}
 
-			t.Kind = IsKeyword(name)
-			if t.Kind == IDENTIFIER {
-				t.Value = name
+			tok = token.EOF
+		case '\n':
+			l.asi = false
+			return token.SEMICOLON, "\n", pos
+		case '"':
+			l.asi = true
+			tok = token.STRING
+			lit = l.lexStr()
+		case '\'':
+			l.asi = true
+			tok = token.CHAR
+			lit = l.lexChar()
+		case '#':
+			// check if the comment is just after a 'asi' trigger
+			if l.asi {
+				l.cc = '#'
+				l.offset = l.file.Base // TODO: change this
+				l.rdOffset = l.offset + 1
+				l.asi = false
+				return token.SEMICOLON, "\n", pos
 			}
-		} else if l.CodePoint == unicode.ReplacementChar { // invalid unicode codepoint
-			l.Err.Msg = ErrUnexpectedUnicodeChar
-			l.step()
+
+			// parse comment
+			comment := l.lexComment()
+			if !l.comment {
+				l.asi = false
+				return l.Lex()
+			}
+
+			tok = token.COMMENT
+			lit = comment
+		case '^':
+			tok = token.CARET
+		case '?':
+			tok = token.QUESTION
+		case '(':
+			tok = token.LEFT_PAREN
+		case ')':
+			tok = token.RIGHT_PAREN
+			asi = true
+		case '[':
+			tok = token.LEFT_BRACKET
+		case ']':
+			tok = token.RIGHT_BRACKET
+			asi = true
+		case '{':
+			tok = token.LEFT_BRACE
+		case '}':
+			tok = token.RIGHT_BRACE
+			asi = true
+		case ',':
+			tok = token.COMMA
+		case ';':
+			tok = token.SEMICOLON
+			lit = ";"
+		case ':':
+			tok = token.COLON
+			if l.cc == ':' {
+				tok = token.DOUBLE_COLON
+				l.next()
+			}
+		case '.':
+			tok = token.DOT
+			if l.cc == '.' {
+				tok = token.DOT_DOT
+				l.next()
+			}
+		case '+':
+			tok = token.PLUS
+			if l.cc == '=' {
+				tok = token.PLUS_EQ
+				l.next()
+			}
+		case '*':
+			tok = token.STAR
+			if l.cc == '=' {
+				tok = token.STAR_EQ
+				l.next()
+			}
+		case '/':
+			tok = token.SLASH
+			if l.cc == '=' {
+				tok = token.SLASH_EQ
+				l.next()
+			}
+		case '%':
+			tok = token.PERCENT
+			if l.cc == '=' {
+				tok = token.PERCENT_EQ
+				l.next()
+			}
+		case '=':
+			tok = token.EQUAL
+			if l.cc == '=' {
+				tok = token.EQUAL_EQUAL
+				l.next()
+			}
+		case '!':
+			tok = token.BANG
+			if l.cc == '=' {
+				tok = token.BANG_EQ
+				l.next()
+			}
+		case '~':
+			tok = token.TILDE
+			if l.cc == '=' {
+				tok = token.NOT_EQ_BIT
+				l.next()
+			}
+		case '-':
+			tok = token.MINUS
+			switch l.cc {
+			case '=':
+				tok = token.MINUS_EQ
+				l.next()
+			case '>':
+				tok = token.ARROW
+				l.next()
+			}
+		case '>':
+			tok = token.GREATER
+			switch l.cc {
+			case '>':
+				tok = token.RIGHT_SHIFT
+				l.next()
+				if l.cc == '=' {
+					tok = token.RSHIFT_EQ
+					l.next()
+				}
+			case '=':
+				tok = token.GREATER_EQ
+				l.next()
+			}
+		case '<':
+			tok = token.LESS
+			switch l.cc {
+			case '<':
+				tok = token.LEFT_SHIFT
+				l.next()
+				if l.cc == '=' {
+					tok = token.LSHIFT_EQ
+					l.next()
+				}
+			case '=':
+				tok = token.LESS_EQ
+				l.next()
+			}
+		case '&':
+			tok = token.AMPERSAND
+			switch l.cc {
+			case '=':
+				tok = token.AND_EQ
+				l.next()
+			case '&':
+				tok = token.AND
+				l.next()
+			}
+		case '|':
+			tok = token.PIPE
+			switch l.cc {
+			case '=':
+				tok = token.OR_EQ
+				l.next()
+			case '|':
+				tok = token.OR
+				l.next()
+			}
+		default:
+			if c != bom {
+				l.error(l.offset, ErrUnexpectedUnicodeChar)
+			}
+
+			asi = l.asi // preserve asi info in case of illegal token
+			lit = string(c)
+			tok = token.INVALID
 		}
 	}
 
-	t.Pos = tokenStart
-	l.NxtToken = t
+	l.asi = asi
+	return
 }
