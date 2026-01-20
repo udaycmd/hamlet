@@ -39,9 +39,10 @@ type (
 	//
 	// [scanner]: https://github.com/golang/go/blob/master/src/go/scanner/scanner.go
 	Lexer struct {
-		file *token.SourceHandle // source file handle
-		err  ErrorHandler
-		path string // abs path of file
+		file     *token.SourceHandle // source file handle
+		err      ErrorHandler
+		errCount int    // number of lexical errors
+		path     string // abs path of file
 
 		src      []byte // actual source
 		cc       rune   // current character
@@ -52,16 +53,17 @@ type (
 	}
 )
 
-func NewLexer(file *token.SourceHandle, src []byte, err ErrorHandler) *Lexer {
+func NewLexer(file *token.SourceHandle, src []byte, err ErrorHandler, parseComments bool) *Lexer {
 	if file.Len != len(src) {
 		panic(fmt.Sprintf("file size %d does not match with source length %d", file.Len, len(src)))
 	}
 
 	l := &Lexer{
-		file: file,
-		src:  src,
-		err:  err,
-		cc:   ' ',
+		file:    file,
+		src:     src,
+		err:     err,
+		cc:      ' ',
+		comment: parseComments,
 	}
 
 	l.next()
@@ -110,6 +112,12 @@ func (l *Lexer) error(offset int, msg string) {
 	if l.err != nil {
 		l.err(msg, l.file.TapePos(offset))
 	}
+
+	l.errCount++
+}
+
+func (l *Lexer) ErrCount() int {
+	return l.errCount
 }
 
 func (l *Lexer) lexIdent() string {

@@ -65,18 +65,20 @@ type Module struct {
 
 type (
 	BasicLit struct {
-		Lit token.Token
+		Lit token.Position
 	}
 
 	BinaryExpr struct {
-		Rhs Expr
-		Op  token.Tok
-		Lhs Expr
+		Rhs   Expr
+		Op    token.Tok
+		OpPos token.Position
+		Lhs   Expr
 	}
 
 	UnaryExpr struct {
-		X  Expr
-		Op token.Tok
+		X     Expr
+		Op    token.Tok
+		OpPos token.Position
 	}
 
 	GroupExpr struct {
@@ -86,17 +88,9 @@ type (
 	}
 )
 
-func (e BasicLit) exprNode()             {}
-func (e BasicLit) Start() token.Position { return e.Lit.Pos }
-func (e BasicLit) End() token.Position {
-	width := len(e.Lit.Value)
-
-	return token.Position{
-		Line:   e.Lit.Pos.Line,
-		Column: e.Lit.Pos.Column + width,
-		Offset: e.Lit.Pos.Offset + width,
-	}
-}
+func (e BasicLit) exprNode()              {}
+func (e BasicLit) Start() token.Position  { return 0 }
+func (e BasicLit) End() token.Position    { return 0 }
 
 func (e BinaryExpr) exprNode()            {}
 func (e UnaryExpr) exprNode()             {}

@@ -5,272 +5,208 @@
 package lexer_test
 
 import (
+	"fmt"
+	"math/rand"
+	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/udaycmd/hamlet/src/errors"
-	. "github.com/udaycmd/hamlet/src/lexer"
-	. "github.com/udaycmd/hamlet/src/token"
+	"github.com/udaycmd/hamlet/src/lexer"
+	"github.com/udaycmd/hamlet/src/token"
 )
 
-func lexSingleToken(content string) *Token {
-	lexer := NewLexer(strings.NewReader(content))
-	lexer.Next()
-	return lexer.NxtToken
+var testSrcManager = token.NewSourceManager()
+
+type lexResult struct {
+	Lit    string
+	Kind   token.Tok
+	Line   int
+	Column int
 }
 
-func lexErrSingleToken(content string) errors.Error {
-	lexer := NewLexer(strings.NewReader(content))
-	lexer.Next()
-	return lexer.Err
+func fail(t *testing.T, msg string) {
+	t.Errorf("%s", msg)
 }
 
-func lexTokens(content string) Lexer {
-	return NewLexer(strings.NewReader(content))
+func expectEqual(t *testing.T, x, y any, msg string) {
+	if !reflect.DeepEqual(x, y) {
+		if msg == "" {
+			msg = "unspecified failure!"
+		}
+		fail(t, msg)
+	}
+}
+
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := 1
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			n++
+		}
+	}
+	return n
+}
+
+func lexExpect(t *testing.T, input string, parseComments bool, expected []lexResult) {
+	testFile := testSrcManager.AddFile("test", -1, len(input))
+
+	l := lexer.NewLexer(testFile, []byte(input), func(msg string, _ token.Position) { fail(t, msg) }, parseComments)
+
+	for i, e := range expected {
+		tok, literal, pos := l.Lex()
+
+		srcPos := testFile.SrcPos(pos)
+		expectEqual(t, e.Kind, tok, fmt.Sprintf("[%d] expected: %s, got: %s", i, e.Kind, tok))
+		expectEqual(t, e.Lit, literal, "literal value not equal")
+		expectEqual(t, e.Line, srcPos.Line, "line number not synchronized")
+		expectEqual(t, e.Column, srcPos.Column, "column number not synchronized")
+	}
+
+	tok, _, _ := l.Lex()
+	expectEqual(t, token.EOF, tok, "more tokens left")
+	expectEqual(t, 0, l.ErrCount(), "error count not correct")
 }
 
 func TestTokens(t *testing.T) {
-	cases := []struct {
-		str  string
-		kind Tok
+	testcases := []struct {
+		token token.Tok
+		lit   string
 	}{
-		{"", EOF},
-		{"\uFFFD", INVALID},
-
-		// - Keywords -
-		{"break", BREAK},
-		{"case", CASE},
-		{"continue", CONTINUE},
-		{"default", DEFAULT},
-		{"else", ELSE},
-		{"enum", ENUM},
-		{"fn", FN},
-		{"for", FOR},
-		{"import", IMPORT},
-		{"export", EXPORT},
-		{"interface", INTERFACE},
-		{"if", IF},
-		{"in", IN},
-		{"map", MAP},
-		{"return", RETURN},
-		{"struct", STRUCT},
-		{"switch", SWITCH},
-		{"type", TYPE},
-		{"var", VAR},
-		{"true", TRUE},
-		{"false", FALSE},
-		{"empty", EMPTY},
-
-		// - Operators -
-		{"+", PLUS},
-		{"-", MINUS},
-		{"*", STAR},
-		{"/", SLASH},
-		{"%", PERCENT},
-		{"&", AMPERSAND},
-		{"|", PIPE},
-		{"~", TILDE},
-		{"^", CARET},
-		{"->", ARROW},
-		{"<<", LEFT_SHIFT},
-		{">>", RIGHT_SHIFT},
-		{"+=", PLUS_EQ},
-		{"-=", MINUS_EQ},
-		{"*=", STAR_EQ},
-		{"/=", SLASH_EQ},
-		{"%=", PERCENT_EQ},
-		{"&=", AND_EQ},
-		{"|=", OR_EQ},
-		{"~=", NOT_EQ_BIT},
-		{"<<=", LSHIFT_EQ},
-		{">>=", RSHIFT_EQ},
-		{":=", WALRUS},
-		{"=", EQUAL},
-		{"&&", AND},
-		{"||", OR},
-		{"!", BANG},
-		{"!=", BANG_EQ},
-		{"==", EQUAL_EQUAL},
-		{"<", LESS},
-		{">", GREATER},
-		{"<=", LESS_EQ},
-		{">=", GREATER_EQ},
-		{"?", QUESTION},
-
-		// - Punctuations -
-		{"(", LEFT_PAREN},
-		{")", RIGHT_PAREN},
-		{"[", LEFT_BRACKET},
-		{"]", RIGHT_BRACKET},
-		{"{", LEFT_BRACE},
-		{"}", RIGHT_BRACE},
-		{",", COMMA},
-		{";", SEMICOLON},
-		{":", COLON},
-		{"::", DOUBLE_COLON},
-		{".", DOT},
-		{"..", DOT_DOT},
-
-		// - Literals -
-		{"Hamlet", IDENTIFIER},
-		{"$Hamlet", IDENTIFIER},
-		{"_Hamlet", IDENTIFIER},
-		{"\"Hamlet\"", STRING},
-		{"'H'", CHAR},
-		{"69", INTEGER},
-		{"69.42", REAL},
-
-		// - Comment -
-		{"    # This is a single line comment with leading spaces.", EOF},
+		{token.COMMENT, "# a comment \n"},
+		{token.COMMENT, "#\r\n"},
+		{token.IDENTIFIER, "foobar"},
+		{token.IDENTIFIER, "a۰۱۸"},
+		{token.IDENTIFIER, "foo६४"},
+		{token.IDENTIFIER, "bar９８７６"},
+		{token.IDENTIFIER, "ŝ"},
+		{token.IDENTIFIER, "ŝfoo"},
+		{token.INTEGER, "0"},
+		{token.INTEGER, "1"},
+		{token.INTEGER, "123456789012345678890"},
+		{token.INTEGER, "01234567"},
+		{token.INTEGER, "0xcafebabe"},
+		{token.REAL, "0."},
+		{token.REAL, ".0"},
+		{token.REAL, "3.14159265"},
+		{token.REAL, "1e0"},
+		{token.REAL, "1e+100"},
+		{token.REAL, "1e-100"},
+		{token.REAL, "2.71828e-1000"},
+		{token.CHAR, "'a'"},
+		{token.CHAR, "'\\000'"},
+		{token.CHAR, "'\\xFF'"},
+		{token.CHAR, "'\\uff16'"},
+		{token.CHAR, "'\\U0000ff16'"},
+		{token.PLUS, "+"},
+		{token.MINUS, "-"},
+		{token.STAR, "*"},
+		{token.SLASH, "/"},
+		{token.PERCENT, "%"},
+		{token.AMPERSAND, "&"},
+		{token.OR, "|"},
+		{token.CARET, "^"},
+		{token.LEFT_SHIFT, "<<"},
+		{token.RIGHT_SHIFT, ">>"},
+		{token.PLUS_EQ, "+="},
+		{token.MINUS_EQ, "-="},
+		{token.STAR_EQ, "*="},
+		{token.SLASH_EQ, "/="},
+		{token.PERCENT_EQ, "%="},
+		{token.AND_EQ, "&="},
+		{token.OR_EQ, "|="},
+		{token.NOT_EQ_BIT, "~="},
+		{token.LSHIFT_EQ, "<<="},
+		{token.RSHIFT_EQ, ">>="},
+		{token.AND, "&&"},
+		{token.OR, "||"},
+		{token.EQUAL_EQUAL, "=="},
+		{token.LESS, "<"},
+		{token.GREATER, ">"},
+		{token.EQUAL, "="},
+		{token.BANG, "!"},
+		{token.BANG_EQ, "!="},
+		{token.LESS_EQ, "<="},
+		{token.GREATER_EQ, ">="},
+		{token.DOT, "."},
+		{token.DOT_DOT, ".."},
+		{token.LEFT_PAREN, "("},
+		{token.LEFT_BRACKET, "["},
+		{token.LEFT_BRACE, "{"},
+		{token.COMMA, ","},
+		{token.RIGHT_PAREN, ")"},
+		{token.RIGHT_BRACKET, "]"},
+		{token.RIGHT_BRACE, "}"},
+		{token.SEMICOLON, ";"},
+		{token.COLON, ":"},
+		{token.BREAK, "break"},
+		{token.CONTINUE, "continue"},
+		{token.ELSE, "else"},
+		{token.FOR, "for"},
+		{token.FN, "fn"},
+		{token.IF, "if"},
+		{token.RETURN, "return"},
+		{token.EXPORT, "export"},
 	}
 
-	for _, tc := range cases {
-		res := lexSingleToken(tc.str).Kind
+	var lines []string
+	var lineSum int
+	lineNumbers := make([]int, len(testcases))
+	columnNumbers := make([]int, len(testcases))
 
-		t.Run(tc.str, func(t *testing.T) {
-			if res != tc.kind {
-				t.Errorf("Test case failed because: Tok.Kind('%s') != Expected.Kind('%s')\n", res, tc.kind)
-			}
-		})
-	}
-}
-
-func lexChar(t *testing.T, content, expected string) {
-	t.Run(content, func(t *testing.T) {
-		char := lexSingleToken(content).Value
-		if char != expected {
-			t.Errorf("Test case failed because: Tok.character('%s') != Expected.character('%s')\n", char, expected)
+	for i, tc := range testcases {
+		// add extra lines before each test case
+		emptyLines := rand.Intn(4)
+		for j := 0; j < emptyLines; j++ {
+			lines = append(lines, strings.Repeat(" ", rand.Intn(10)))
 		}
-	})
-}
 
-func lexErrChar(t *testing.T, content, lexErr string) {
-	t.Run(content, func(t *testing.T) {
-		err := lexErrSingleToken(content).Msg
-		if err != lexErr {
-			t.Errorf("Test case failed because: Tok.lexErr(\"%s\") != Expected.lexErr(\"%s\")\n", err, lexErr)
+		// add extra columns around each test case
+		emptyColumns := rand.Intn(10)
+		lines = append(lines, fmt.Sprintf("%s%s%s",
+			strings.Repeat(" ", emptyColumns),
+			tc.lit,
+			strings.Repeat(" ", rand.Intn(10))))
+
+		lineNumbers[i] = lineSum + emptyLines + 1
+		lineSum += emptyLines + countLines(tc.lit)
+		columnNumbers[i] = emptyColumns + 1
+	}
+
+	// expected results
+	var expected []lexResult
+	var expectedSkipComments []lexResult
+
+	for i, tc := range testcases {
+		// expected literal
+		var expectedLiteral string
+		switch tc.token {
+		case token.COMMENT:
+			// # style comment literal doesn't contain a '\n'
+			expectedLiteral = tc.lit[:len(tc.lit)-1]
+		case token.IDENTIFIER:
+			expectedLiteral = tc.lit
+		case token.SEMICOLON:
+			expectedLiteral = ";"
+		default:
+			expectedLiteral = tc.lit
 		}
-	})
-}
 
-func TestCharLiterals(t *testing.T) {
-	lexChar(t, "'H'", "H")
-	lexChar(t, "'\n'", "\n")
-	lexChar(t, "'\t'", "\t")
-	lexChar(t, "'\r'", "\r")
-	lexChar(t, "'\b'", "\b")
+		res := lexResult{
+			Lit:    expectedLiteral,
+			Kind:   tc.token,
+			Line:   lineNumbers[i],
+			Column: columnNumbers[i],
+		}
 
-	lexErrChar(t, "'À'", "")
-	lexErrChar(t, "'Б'", "")
-	lexErrChar(t, "'\uFFFD'", ErrUnexpectedUnicodeChar)
-	lexErrChar(t, "''", ErrEmptyCharLiteral)
-	lexErrChar(t, "'", ErrUnterminatedCharLiteral)
-	lexErrChar(t, "'👩🏻‍🤝‍👨🏾'", ErrCharLiteralTooWide)
-}
-
-func TestImplicitSemiColon(t *testing.T) {
-	cases := []struct {
-		str   string
-		kinds []Tok
-	}{
-		// - Keywords that trigger implicit semicolon -
-		{"return\n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOF}},
-		{"break\n", []Tok{BREAK, IMPLICIT_SEMICOLON, EOF}},
-		{"continue\n", []Tok{CONTINUE, IMPLICIT_SEMICOLON, EOF}},
-
-		// - Literals -
-		{"123\n", []Tok{INTEGER, IMPLICIT_SEMICOLON, EOF}},
-		{"45.67\n", []Tok{REAL, IMPLICIT_SEMICOLON, EOF}},
-		{"\"string\"\n", []Tok{STRING, IMPLICIT_SEMICOLON, EOF}},
-		{"'c'\n", []Tok{CHAR, IMPLICIT_SEMICOLON, EOF}},
-		{"ident\n", []Tok{IDENTIFIER, IMPLICIT_SEMICOLON, EOF}},
-
-		// - Brackets / Parens -
-		{")\n", []Tok{RIGHT_PAREN, IMPLICIT_SEMICOLON, EOF}},
-		{"]\n", []Tok{RIGHT_BRACKET, IMPLICIT_SEMICOLON, EOF}},
-		{"}\n", []Tok{RIGHT_BRACE, IMPLICIT_SEMICOLON, EOF}},
-
-		// - Operator -
-		{"?\n", []Tok{QUESTION, IMPLICIT_SEMICOLON, EOF}},
-
-		// - Cases NOT triggering implicit semicolon -
-		{"+\n", []Tok{PLUS, EOL, EOF}},
-		{"+=\n", []Tok{PLUS_EQ, EOL, EOF}},
-		{"-\n", []Tok{MINUS, EOL, EOF}},
-		{"(\n", []Tok{LEFT_PAREN, EOL, EOF}},
-		{"{\n", []Tok{LEFT_BRACE, EOL, EOF}},
-		{",\n", []Tok{COMMA, EOL, EOF}},
-		{".\n", []Tok{DOT, EOL, EOF}},
-
-		// - Multiple newlines -
-		{"return\n\n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
-		{"return \n  \n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
-		{"return # this is a comment after keyword\n \n", []Tok{RETURN, IMPLICIT_SEMICOLON, EOL, EOF}},
-
-		// - Mixed -
-		{"a = 1\n b = 2", []Tok{IDENTIFIER, EQUAL, INTEGER, IMPLICIT_SEMICOLON, IDENTIFIER, EQUAL, INTEGER, EOF}},
-		{"return\n 1 + 2", []Tok{RETURN, IMPLICIT_SEMICOLON, INTEGER, PLUS, INTEGER, EOF}},
+		expected = append(expected, res)
+		if tc.token != token.COMMENT {
+			expectedSkipComments = append(expectedSkipComments, res)
+		}
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.str, func(t *testing.T) {
-			lexer := lexTokens(tc.str)
-			lexer.Next()
-
-			for _, kind := range tc.kinds {
-				if lexer.NxtToken.Kind != kind {
-					t.Errorf("Test Case failed because: Tok.Kind('%s') != Expected.Kind('%s')", lexer.NxtToken.Kind, kind)
-				}
-				lexer.Next()
-			}
-		})
-	}
-}
-
-func TestPositions(t *testing.T) {
-	cases := []struct {
-		str       string
-		positions []Position
-	}{
-		{
-			"var x = 1",
-			[]Position{
-				{Line: 1, Column: 1, Offset: 0},
-				{Line: 1, Column: 5, Offset: 4},
-				{Line: 1, Column: 7, Offset: 6},
-				{Line: 1, Column: 9, Offset: 8},
-				{Line: 1, Column: 10, Offset: 9},
-			},
-		},
-		{
-			"\ta",
-			[]Position{
-				{Line: 1, Column: 5, Offset: 1},
-				{Line: 1, Column: 6, Offset: 2},
-			},
-		},
-		{
-			"a\nb",
-			[]Position{
-				{Line: 1, Column: 1, Offset: 0},
-				{Line: 1, Column: 2, Offset: 1},
-				{Line: 2, Column: 1, Offset: 2},
-				{Line: 2, Column: 2, Offset: 3},
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.str, func(t *testing.T) {
-			lexer := lexTokens(tc.str)
-			lexer.Next()
-
-			for _, pos := range tc.positions {
-				if lexer.NxtToken.Pos != pos {
-					t.Errorf("Test Case failed because: Tok.Pos('%s') != Expected.Pos('%s')", lexer.NxtToken.Pos, pos)
-				}
-				lexer.Next()
-			}
-		})
-	}
+	lexExpect(t, strings.Join(lines, "\n"), false, expected)
+	lexExpect(t, strings.Join(lines, "\n"), true, expectedSkipComments)
 }

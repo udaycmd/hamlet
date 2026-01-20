@@ -6,12 +6,6 @@ package token
 
 type Tok uint8
 
-type Token struct {
-	Lit  string
-	Kind Tok
-	Pos  Position
-}
-
 const (
 	EOF Tok = iota
 	INVALID
