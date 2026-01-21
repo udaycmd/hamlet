@@ -50,16 +50,16 @@ func countLines(s string) int {
 	return n
 }
 
-func lexExpect(t *testing.T, input string, parseComments bool, expected []lexResult) {
-	testFile := testSrcManager.AddFile("test", -1, len(input))
+func lexExpect(t *testing.T, input string, mode lexer.LexMode, expected []lexResult) {
+	testFile := testSrcManager.AddFile("testfile", -1, len(input))
 
-	l := lexer.NewLexer(testFile, []byte(input), func(msg string, _ token.Position) { fail(t, msg) }, parseComments)
+	l := lexer.NewLexer(testFile, []byte(input), func(msg string, _ token.Position) { fail(t, msg) }, mode)
 
 	for i, e := range expected {
 		tok, literal, pos := l.Lex()
 
 		srcPos := testFile.SrcPos(pos)
-		expectEqual(t, e.Kind, tok, fmt.Sprintf("[%d] expected: %s, got: %s", i, e.Kind, tok))
+		expectEqual(t, e.Kind, tok, fmt.Sprintf("(%d) expected: %s, got: %s", i, e.Kind, tok))
 		expectEqual(t, e.Lit, literal, "literal value not equal")
 		expectEqual(t, e.Line, srcPos.Line, "line number not synchronized")
 		expectEqual(t, e.Column, srcPos.Column, "column number not synchronized")
@@ -106,7 +106,7 @@ func TestTokens(t *testing.T) {
 		{token.SLASH, "/"},
 		{token.PERCENT, "%"},
 		{token.AMPERSAND, "&"},
-		{token.OR, "|"},
+		{token.PIPE, "|"},
 		{token.CARET, "^"},
 		{token.LEFT_SHIFT, "<<"},
 		{token.RIGHT_SHIFT, ">>"},
@@ -207,6 +207,6 @@ func TestTokens(t *testing.T) {
 		}
 	}
 
-	lexExpect(t, strings.Join(lines, "\n"), false, expected)
-	lexExpect(t, strings.Join(lines, "\n"), true, expectedSkipComments)
+	lexExpect(t, strings.Join(lines, "\n"), lexer.ParseComment|lexer.NoAsi, expected)
+	lexExpect(t, strings.Join(lines, "\n"), lexer.NoAsi, expectedSkipComments)
 }

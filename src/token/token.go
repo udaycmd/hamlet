@@ -35,6 +35,8 @@ const (
 	FALSE
 	EMPTY
 
+	_OpBegin
+
 	// - Operators -
 	ARROW
 	PLUS
@@ -70,6 +72,10 @@ const (
 	GREATER_EQ
 	QUESTION
 
+	_OpEnd
+
+	_PunBegin
+
 	// - Punctuations -
 	LEFT_PAREN
 	RIGHT_PAREN
@@ -84,6 +90,8 @@ const (
 	DOT
 	DOT_DOT
 
+	_PunEnd
+	
 	// - Literals -
 	IDENTIFIER
 	INTEGER
@@ -115,6 +123,14 @@ var keywords = map[string]Tok{
 	"true":      TRUE,
 	"false":     FALSE,
 	"empty":     EMPTY,
+}
+
+func (t Tok) IsOperator() bool {
+	return t < _OpEnd && t > _OpBegin
+}
+
+func (t Tok) IsPunctuator() bool {
+	return t < _PunEnd && t > _PunBegin
 }
 
 func (t Tok) String() string {

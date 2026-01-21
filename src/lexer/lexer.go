@@ -18,6 +18,11 @@ const (
 	bom = rune(0xFEFF)
 )
 
+const (
+	NoAsi LexMode = iota + 1
+	ParseComment
+)
+
 var (
 	ErrUnexpectedNullChar      = "unexpected NULL character"
 	ErrUnexpectedUnicodeChar   = "unexpected unicode codepoint"
@@ -35,6 +40,9 @@ var (
 type (
 	ErrorHandler func(message string, pos token.Position)
 
+	// lexing mode
+	LexMode int
+
 	// Based upon Go's [scanner] package
 	//
 	// [scanner]: https://github.com/golang/go/blob/master/src/go/scanner/scanner.go
@@ -48,22 +56,22 @@ type (
 		cc       rune   // current character
 		offset   int    // cc's offset in source
 		rdOffset int    // position after current char
-		asi      bool   // enable automatic semicolon insertion
-		comment  bool   // enable comment parsing
+		asi      bool   // assume a ';' instead of '\n'
+		mode     LexMode
 	}
 )
 
-func NewLexer(file *token.SourceHandle, src []byte, err ErrorHandler, parseComments bool) *Lexer {
+func NewLexer(file *token.SourceHandle, src []byte, err ErrorHandler, mode LexMode) *Lexer {
 	if file.Len != len(src) {
 		panic(fmt.Sprintf("file size %d does not match with source length %d", file.Len, len(src)))
 	}
 
 	l := &Lexer{
-		file:    file,
-		src:     src,
-		err:     err,
-		cc:      ' ',
-		comment: parseComments,
+		file: file,
+		src:  src,
+		err:  err,
+		cc:   ' ',
+		mode: mode,
 	}
 
 	l.next()
@@ -196,6 +204,8 @@ func (l *Lexer) lexEscape(quote rune) bool {
 	case 'a', 'b', 'f', 'n', 'r', 't', 'v', '\\', quote:
 		l.next()
 		return true
+	case '0', '1', '2', '3', '4', '5', '6', '7':
+		n, base, max = 3, 8, 255
 	case 'x':
 		l.next()
 		n, base, max = 2, 16, 255
@@ -228,6 +238,7 @@ func (l *Lexer) lexEscape(quote rune) bool {
 		}
 
 		x = x*base + d
+		l.next()
 		n--
 	}
 
@@ -343,11 +354,14 @@ func (l *Lexer) next() {
 	}
 }
 
-func (l *Lexer) Lex() (tok token.Tok, lit string, pos token.Position) {
+func (l *Lexer) Lex() (token.Tok, string, token.Position) {
+	var lit string
+	var tok token.Tok
+
 	l.skipWhitespace()
 
 	// calculate tape position
-	pos = l.file.TapePos(l.offset)
+	pos := l.file.TapePos(l.offset)
 
 	asi := false
 
@@ -378,11 +392,11 @@ func (l *Lexer) Lex() (tok token.Tok, lit string, pos token.Position) {
 			l.asi = false
 			return token.SEMICOLON, "\n", pos
 		case '"':
-			l.asi = true
+			asi = true
 			tok = token.STRING
 			lit = l.lexStr()
 		case '\'':
-			l.asi = true
+			asi = true
 			tok = token.CHAR
 			lit = l.lexChar()
 		case '#':
@@ -397,7 +411,7 @@ func (l *Lexer) Lex() (tok token.Tok, lit string, pos token.Position) {
 
 			// parse comment
 			comment := l.lexComment()
-			if !l.comment {
+			if l.mode&ParseComment == 0 {
 				l.asi = false
 				return l.Lex()
 			}
@@ -542,15 +556,23 @@ func (l *Lexer) Lex() (tok token.Tok, lit string, pos token.Position) {
 			}
 		default:
 			if c != bom {
-				l.error(l.offset, ErrUnexpectedUnicodeChar)
+				l.error(l.file.Offset(pos), ErrUnexpectedUnicodeChar)
 			}
 
-			asi = l.asi // preserve asi info in case of illegal token
+			// preserve asi info in case of illegal token
+			asi = l.asi
 			lit = string(c)
 			tok = token.INVALID
 		}
 	}
 
-	l.asi = asi
-	return
+	// calculate literals for punctuators and operators
+	if tok.IsOperator() || tok.IsPunctuator() {
+		lit = tok.String()
+	}
+
+	if l.mode&NoAsi == 0 {
+		l.asi = asi
+	}
+	return tok, lit, pos
 }
