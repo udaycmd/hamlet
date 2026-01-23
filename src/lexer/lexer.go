@@ -24,17 +24,18 @@ const (
 )
 
 var (
-	ErrUnexpectedNullChar      = "unexpected NULL character"
-	ErrUnexpectedUnicodeChar   = "unexpected unicode codepoint"
-	ErrIllegalBOM              = "illegal byte order mark"
-	ErrUnterminatedStrLiteral  = "unterminated string literal"
-	ErrUnterminatedCharLiteral = "unterminated character literal"
-	ErrUnterminatedEscapeSeq   = "unterminated escape sequence"
-	ErrUnknownEscapeSeq        = "unknown escape sequence"
-	ErrIllegalUnicodeEscape    = "illegal unicode escape inside byte sequence"
-	ErrEmptyCharLiteral        = "zero width character literal encountered"
-	ErrCharLiteralTooWide      = "character literal too wide"
-	ErrNoDigitAfterExponent    = "expected digit(s) after exponent"
+	ErrUnexpectedNullChar        = "unexpected NULL character"
+	ErrUnexpectedUnicodeChar     = "unexpected unicode codepoint"
+	ErrIllegalBOM                = "illegal byte order mark"
+	ErrUnterminatedStrLiteral    = "unterminated string literal"
+	ErrUnterminatedCharLiteral   = "unterminated character literal"
+	ErrUnterminatedEscapeSeq     = "unterminated escape sequence"
+	ErrUnknownEscapeSeq          = "unknown escape sequence"
+	ErrIllegalUnicodeEscape      = "illegal unicode escape inside byte sequence"
+	ErrEmptyCharLiteral          = "zero width character literal encountered"
+	ErrCharLiteralTooWide        = "character literal too wide"
+	ErrNoDigitAfterExponent      = "expected digit(s) after exponent"
+	ErrNoDigitAfterBaseSpecifier = "expected digit(s) after base specifier"
 )
 
 type (
@@ -163,6 +164,11 @@ func (l *Lexer) lexNum() (tok token.Tok, lit string) {
 		l.next()
 	}
 
+	if base != 10 && digitVal(rune(l.peek())) == 16 {
+		l.error(offset, ErrNoDigitAfterBaseSpecifier)
+		goto ret
+	}
+
 	// lex whole number
 	l.lexDigitSeq(base)
 
@@ -191,6 +197,7 @@ func (l *Lexer) lexNum() (tok token.Tok, lit string) {
 		}
 	}
 
+ret:
 	return tok, string(l.src[offset:l.offset])
 }
 
