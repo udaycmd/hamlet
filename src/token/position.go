@@ -12,6 +12,7 @@ import (
 // [Position] represents a position in the SourceManager.
 type Position int
 
+// [SrcPos] contains the positon of token in the souce code
 type SrcPos struct {
 	FileName string
 	Offset   int

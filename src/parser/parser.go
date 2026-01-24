@@ -4,161 +4,106 @@
 
 package parser
 
-// import (
-// 	"io"
+import (
+	"fmt"
 
-// 	"github.com/udaycmd/hamlet/src/errors"
-// 	"github.com/udaycmd/hamlet/src/lexer"
-// 	"github.com/udaycmd/hamlet/src/token"
-// )
+	"github.com/udaycmd/hamlet/src/lexer"
+	"github.com/udaycmd/hamlet/src/token"
+)
 
-// type parser struct {
-// 	lexer  lexer.Lexer
-// 	Errors []errors.Error
-// }
+type bailout struct{}
 
-// func NewParser(source io.Reader) *parser {
-// 	// TODO: remove this
-// 	l := lexer.NewLexer(source)
-// 	l.Next()
+type ParseError struct {
+	position token.SrcPos
+	msg      string
+}
 
-// 	return &parser{
-// 		lexer: l,
-// 	}
-// }
+type ParseErrors []*ParseError
 
-// func (p *parser) over() bool {
-// 	return p.lexer.Token.Kind == token.EOF
-// }
+func (pe ParseErrors) Extend(pos token.SrcPos, msg string) {
+	pe = append(pe, &ParseError{position: pos, msg: msg})
+}
 
-// func (p *parser) curr() *token.Token {
-// 	return p.lexer.Token
-// }
+func (pe ParseErrors) Error() string {
+	n := len(pe)
+	switch n {
+	case 0:
+		return ""
+	case 1:
+		return "TODO: error should be here"
+	}
 
-// func (p *parser) advance() {
-// 	if p.over() {
-// 		return
-// 	}
+	// TODO: change this
+	return fmt.Sprintf("%s (and %d more errors)", pe[0].msg, n-1)
+}
 
-// 	p.lexer.Next()
-// }
+func (pe ParseErrors) err() error {
+	if len(pe) == 0 {
+		return nil
+	}
 
-// func (p *parser) expectNext(expected token.Tok) bool {
-// 	if p.lexer.Token.Kind == expected {
-// 		p.advance()
-// 		return true
-// 	}
+	return pe
+}
 
-// 	return false
-// }
+// Based upon Go's [parser] package
+//
+// [parser]: https://github.com/golang/go/blob/master/src/go/parser/parser.go
+type Parser struct {
+	file           *token.SourceHandle // file feeded to the parser
+	errors         ParseErrors         // all parsing errors
+	lexer          *lexer.Lexer        // lexer
+	pos            token.Position      // current position in the SourceManager
+	kind           token.Tok           // current token
+	maxReportError int                 // maximum number of errors to report before parsing termination
+	tokenLit       string              // current token's literal value
+}
 
-// func (p *parser) parseDecl() Decl {
-// 	curr := p.curr()
+func NewParser(file *token.SourceHandle, src []byte, maxReportError int, mode lexer.LexMode) *Parser {
+	p := &Parser{file: file, maxReportError: maxReportError}
 
-// 	switch curr.Kind {
-// 	case token.FN:
-// 		return p.parseFnDecl(false)
-// 	case token.EXPORT:
-// 		return p.parseExportDecl()
-// 	default:
-// 		panic("unimplemented")
-// 	}
-// }
+	lexerErrorHandlerfunc := func(msg string, pos token.SrcPos) {
+		p.errors.Extend(pos, msg)
+	}
+	p.lexer = lexer.NewLexer(p.file, src, lexerErrorHandlerfunc, mode)
+	p.next()
+	return p
+}
 
-// func (p *parser) parseExportDecl() Decl {
-// 	p.advance()
-// 	curr := p.curr()
+func (p *Parser) next() {
+	p.kind, p.tokenLit, p.pos = p.lexer.Lex()
+}
 
-// 	switch curr.Kind {
-// 	case token.FN:
-// 		return p.parseFnDecl(true)
-// 	default:
-// 		panic("unimplemented")
-// 	}
-// }
+func (p *Parser) error(pos token.Position, msg string) {
+	srcpos := p.file.SrcPos(pos)
 
-// func (p *parser) parseFnDecl(exported bool) Decl {
-// 	decl := FuncDecl{IsExported: exported}
+	n := len(p.errors)
+	if n > 0 && p.errors[n-1].position.Line == srcpos.Line {
+		return
+	}
 
-// 	if !p.expectNext(token.IDENTIFIER) {
-// 		// TODO: Better error report!
-// 		return nil
-// 	}
+	if n > p.maxReportError {
+		panic(bailout{})
+	}
+	p.errors.Extend(srcpos, msg)
+}
 
-// 	if !p.expectNext(token.LEFT_PAREN) {
-// 		// TODO: Better error report!
-// 		return nil
-// 	}
+func (p *Parser) Parse() (*File, error) {
+	var err error
+	defer func() {
+		if v := recover(); v != nil {
+			if _, ok := v.(bailout); !ok {
+				panic(v)
+			}
+		}
 
-// 	// TODO: use this in decl above
-// 	_ = p.parseFnParamDecl()
+		// sort errors based upon filename or line & column number
+		err = p.errors.err()
+	}()
 
-// 	if !p.expectNext(token.ARROW) {
-// 		// TODO: Better error report!
-// 		return nil
-// 	}
-
-// 	if !p.expectNext(token.LEFT_BRACE) {
-// 		// TODO: Better error report!
-// 		return nil
-// 	}
-
-// 	decl.Body = p.parseBlockStmt()
-
-// 	return nil
-// }
-
-// func (p *parser) parseFnParamDecl() Decl {
-// 	return nil
-// }
-
-// func (p *parser) parseBlockStmt() *BlockStmt {
-// 	return nil
-// }
-
-// // Expressions
-
-// func (p *parser) parseExpr() Expr {
-// 	return p.parseEqualityExpr()
-// }
-
-// func (p *parser) parseEqualityExpr() Expr {
-// 	return nil
-// }
-
-// func (p *parser) parseComparisonExpr() Expr {
-// 	return nil
-// }
-
-// func (p *parser) parseTermExpr() Expr {
-// 	return nil
-// }
-
-// func (p *parser) parseFactorizedExpr() Expr {
-// 	return nil
-// }
-
-// func (p *parser) parseUnaryExpr() Expr {
-// 	return nil
-// }
-
-// func (p *parser) parsePrimaryExpr() Expr {
-// 	var x Expr
-// 	curr := p.curr()
-
-// 	switch curr.Kind {
-// 	case token.TRUE, token.FALSE, token.EMPTY, token.REAL,
-// 		token.INTEGER, token.STRING, token.CHAR:
-// 		x = BasicLit{
-// 			Lit: *curr,
-// 		}
-// 	case token.LEFT_PAREN:
-// 		expr := p.parseExpr()
-
-// 		// expect RPAREN
-// 		p.expectNext(token.RIGHT_PAREN)
-// 		x = GroupExpr{X: expr}
-// 	}
-
-// 	return x
-// }
+	// TODO: change this
+	file := &File{
+		SrcFile:    p.file,
+		Statements: nil,
+	}
+	return file, err
+}

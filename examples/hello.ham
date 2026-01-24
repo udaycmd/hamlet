@@ -1,3 +1,3 @@
-fn main(String[] args) -> void {
+main :: fn() {
     @echo("Hello, World");
 }

@@ -39,7 +39,7 @@ var (
 )
 
 type (
-	ErrorHandler func(message string, pos token.Position)
+	ErrorHandler func(message string, pos token.SrcPos)
 
 	// lexing mode
 	LexMode int
@@ -119,7 +119,7 @@ func (l *Lexer) skipWhitespace() {
 
 func (l *Lexer) error(offset int, msg string) {
 	if l.err != nil {
-		l.err(msg, l.file.TapePos(offset))
+		l.err(msg, l.file.SrcPos(l.file.TapePos(offset)))
 	}
 
 	l.errCount++

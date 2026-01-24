@@ -33,67 +33,11 @@ type (
 )
 
 type (
-	BlockStmt struct {
+	File struct {
+		SrcFile    *token.SourceHandle
 		Statements []Stmt
 	}
 )
 
-func (s *BlockStmt) NodeVal() string { return "block" }
-func (s *BlockStmt) stmtNode()       {}
-
-type (
-	FuncDecl struct {
-		Name       string
-		IsExported bool
-		IsMain     bool
-		Body       *BlockStmt
-	}
-
-	ExportDecl struct {
-	}
-)
-
-func (d FuncDecl) NodeVal() string { return d.Name }
-func (d FuncDecl) declNode()       {}
-
-type Module struct {
-	Name    string
-	Decls   []Decl
-	Imports []string
-	Exports []string
-}
-
-type (
-	BasicLit struct {
-		Lit token.Position
-	}
-
-	BinaryExpr struct {
-		Rhs   Expr
-		Op    token.Tok
-		OpPos token.Position
-		Lhs   Expr
-	}
-
-	UnaryExpr struct {
-		X     Expr
-		Op    token.Tok
-		OpPos token.Position
-	}
-
-	GroupExpr struct {
-		Lparen token.Position
-		X      Expr
-		Rparen token.Position
-	}
-)
-
-func (e BasicLit) exprNode()              {}
-func (e BasicLit) Start() token.Position  { return 0 }
-func (e BasicLit) End() token.Position    { return 0 }
-
-func (e BinaryExpr) exprNode()            {}
-func (e UnaryExpr) exprNode()             {}
-func (e GroupExpr) exprNode()             {}
-func (e GroupExpr) Start() token.Position { return e.Lparen }
-func (e GroupExpr) End() token.Position   { return e.Rparen }
+func (F *File) Start() token.Position { return token.Position(F.SrcFile.Base) }
+func (F *File) End() token.Position   { return token.Position(F.SrcFile.Base + F.SrcFile.Len) }

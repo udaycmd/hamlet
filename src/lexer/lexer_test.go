@@ -53,7 +53,7 @@ func countLines(s string) int {
 func lexExpect(t *testing.T, input string, mode lexer.LexMode, expected []lexResult) {
 	testFile := testSrcManager.AddFile("testfile", -1, len(input))
 
-	l := lexer.NewLexer(testFile, []byte(input), func(msg string, _ token.Position) { fail(t, msg) }, mode)
+	l := lexer.NewLexer(testFile, []byte(input), func(msg string, _ token.SrcPos) { fail(t, msg) }, mode)
 
 	for i, e := range expected {
 		tok, literal, pos := l.Lex()
