@@ -7,72 +7,67 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
+	"path/filepath"
 )
 
-const (
-	Reset  = "\033[0m"
-	Red    = "\033[31m"
-	Yellow = "\033[33m"
+var (
+	showHelp      bool
+	showVersion   bool
+	maxShowErrors int
 )
 
-func Colorize(text, color string) string {
-	return color + text + Reset
+func printVersion() {
+	fmt.Println("Hamlet Interpreter", HamletVersion)
 }
 
-func printVersion(w io.Writer) {
-	fmt.Fprintln(w, "Hamlet Interpreter", Colorize(HamletVersion, Yellow))
+func help() {
+	printVersion()
+	fmt.Println("Copyright (C) 2025 Uday Tiwari")
+	fmt.Println("Usage: hamlet [option] ... [file] [filearg] ...")
+	fmt.Println("Options:")
+	flag.PrintDefaults()
 }
 
-func help(flags *flag.FlagSet, w io.Writer) {
-	flags.SetOutput(w)
-
-	printVersion(w)
-	fmt.Fprintln(w, "Copyright (C) 2025 Uday Tiwari")
-	fmt.Fprintln(w, "Usage: hamlet [option] ... [file] [filearg] ...")
-	fmt.Fprintln(w, "Options:")
-	flags.PrintDefaults()
-}
-
-func hamlet_main(args []string) error {
-	flags := &flag.FlagSet{}
-
-	v := flags.Bool("version", false, "print the Hamlet version number and exit")
-	nc := flags.Bool("nocheck", false, "disable typechecking")
-	h := flags.Bool("help", false, "print help")
-
-	flags.SetOutput(io.Discard)
-	err := flags.Parse(args)
-
-	if err != nil {
-		if err == flag.ErrHelp {
-			help(flags, os.Stdout)
-		}
-		return err
-	}
-
-	if *h {
-		help(flags, os.Stdout)
+func hamlet_main() error {
+	if showHelp {
+		help()
 		return nil
 	}
 
-	if *v {
-		printVersion(os.Stdout)
+	if showVersion {
+		printVersion()
+		return nil
 	}
 
-	if *nc {
+	input := flag.Arg(0)
+	data, err := os.ReadFile(input)
+	if err != nil {
+		return err
 	}
+
+	input, err = filepath.Abs(input)
+	if err != nil {
+		return err
+	}
+
+	// TODO: Change this
+	fmt.Print(input, "\n", string(data))
 
 	return nil
 }
 
 func main() {
-	if status := hamlet_main(os.Args[1:]); status != nil {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", Colorize("Error", Red), status.Error())
+	if err := hamlet_main(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: %v\n", "\033[31mError\033[0m", err)
 		os.Exit(1)
 	}
+}
 
-	// safe exit with success
-	os.Exit(0)
+// all flags
+func init() {
+	flag.BoolVar(&showVersion, "version", false, "print the Hamlet version number and exit")
+	flag.BoolVar(&showHelp, "help", false, "print help")
+	flag.IntVar(&maxShowErrors, "maxerr", 5, "maximum numbers of errors to show")
+	flag.Parse()
 }
