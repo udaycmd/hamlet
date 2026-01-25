@@ -446,19 +446,15 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 			asi = true
 		case ',':
 			tok = token.COMMA
+		case '=':
+			tok = token.EQUAL
 		case ';':
 			tok = token.SEMICOLON
 			lit = ";"
 		case ':':
 			tok = token.COLON
 			if l.cc == ':' {
-				tok = token.DOUBLE_COLON
-				l.next()
-			}
-		case '.':
-			tok = token.DOT
-			if l.cc == '.' {
-				tok = token.DOT_DOT
+				tok = token.ASSIGN
 				l.next()
 			}
 		case '+':
@@ -483,12 +479,6 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 			tok = token.PERCENT
 			if l.cc == '=' {
 				tok = token.PERCENT_EQ
-				l.next()
-			}
-		case '=':
-			tok = token.EQUAL
-			if l.cc == '=' {
-				tok = token.EQUAL_EQUAL
 				l.next()
 			}
 		case '!':
@@ -560,6 +550,17 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 			case '|':
 				tok = token.OR
 				l.next()
+			}
+		case '.':
+			tok = token.DOT
+			switch l.cc {
+			case '.':
+				tok = token.DOT_DOT
+				l.next()
+				if l.cc == '.' {
+					tok = token.DOT_DOT_DOT
+					l.next()
+				}
 			}
 		default:
 			if c != bom {

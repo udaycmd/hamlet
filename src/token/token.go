@@ -61,6 +61,7 @@ const (
 	LSHIFT_EQ
 	RSHIFT_EQ
 	EQUAL
+	ASSIGN
 	AND
 	OR
 	BANG
@@ -86,9 +87,9 @@ const (
 	COMMA
 	SEMICOLON
 	COLON
-	DOUBLE_COLON
 	DOT
 	DOT_DOT
+	DOT_DOT_DOT
 
 	_PunEnd
 
@@ -157,11 +158,11 @@ var tokens = [...]string{
 	LSHIFT_EQ:     "<<=",
 	RSHIFT_EQ:     ">>=",
 	EQUAL:         "=",
+	ASSIGN:        "::",
 	AND:           "&&",
 	OR:            "||",
 	BANG:          "!",
 	BANG_EQ:       "!=",
-	EQUAL_EQUAL:   "==",
 	LESS:          "<",
 	GREATER:       ">",
 	LESS_EQ:       "<=",
@@ -176,9 +177,9 @@ var tokens = [...]string{
 	COMMA:         ",",
 	SEMICOLON:     ";",
 	COLON:         ":",
-	DOUBLE_COLON:  "::",
 	DOT:           ".",
 	DOT_DOT:       "..",
+	DOT_DOT_DOT:   "...",
 	IDENTIFIER:    "[identifier]",
 	INTEGER:       "[integer]",
 	REAL:          "[real]",

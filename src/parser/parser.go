@@ -7,6 +7,7 @@ package parser
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/udaycmd/hamlet/src/lexer"
 	"github.com/udaycmd/hamlet/src/token"
@@ -125,12 +126,169 @@ func (p *Parser) error(pos token.Position, msg string) {
 	if n > p.maxReportError {
 		panic(bailout{})
 	}
-	
+
 	p.errors.Extend(srcpos, msg)
 }
 
+func (p *Parser) errorExpected(pos token.Position, msg string) {
+	if pos == p.pos {
+		switch {
+		case p.kind == token.SEMICOLON && p.tokenLit == "\n":
+			msg += ", found newline"
+		default:
+			msg += ", found '" + p.kind.String() + "'"
+		}
+	}
+
+	p.error(pos, msg)
+}
+
+func (p *Parser) expect(kind token.Tok) token.Position {
+	pos := p.pos
+
+	if p.kind != kind {
+		p.errorExpected(pos, "expected "+"'"+kind.String()+"'")
+	}
+
+	p.next()
+	return pos
+}
+
+func (p *Parser) parseSimpleStmt(id *Ident) Stmt {
+	// TODO remove this
+	p.next()
+
+	switch p.kind {
+	case token.ASSIGN:
+		// pos, tok := p.pos, p.kind
+		p.next()
+		if p.kind == token.FN {
+			p.parseFuncDecl(id)
+		}
+	}
+}
+
+func (p *Parser) parseStmt() Stmt {
+	switch p.kind {
+	case token.IDENTIFIER:
+		s := p.parseSimpleStmt(&Ident{Name: p.tokenLit, Pos: p.pos})
+		return s
+	}
+}
+
 func (p *Parser) parseStmtList() []Stmt {
-	return nil
+	var stmts []Stmt
+	for p.kind != token.RIGHT_BRACE && p.kind != token.EOF {
+		stmts = append(stmts, p.parseStmt())
+	}
+
+	return stmts
+}
+
+func (p *Parser) parseIdent() *Ident {
+	pos := p.pos
+	name := ""
+
+	if p.kind == token.IDENTIFIER {
+		name = p.tokenLit
+		p.next()
+	} else {
+		p.expect(token.IDENTIFIER)
+	}
+
+	return &Ident{
+		Name: name,
+		Pos:  pos,
+	}
+}
+
+func (p *Parser) parseIdentList() *IdentList {
+	var params []*Ident
+	lparen := p.expect(token.LEFT_PAREN)
+	VarArgs := false
+
+	if p.kind != token.RIGHT_PAREN {
+		if p.kind == token.DOT_DOT_DOT {
+			VarArgs = true
+			p.next()
+		}
+
+		params = append(params, p.parseIdent())
+		for !VarArgs && p.kind == token.COMMA {
+			p.next()
+			if p.kind == token.DOT_DOT_DOT {
+				VarArgs = true
+				p.next()
+			}
+
+			params = append(params, p.parseIdent())
+		}
+	}
+	rparen := p.expect(token.RIGHT_PAREN)
+
+	return &IdentList{
+		LParen:  lparen,
+		RParen:  rparen,
+		VarArgs: VarArgs,
+		List:    params,
+	}
+}
+
+func (p *Parser) parseBlockStmt() *BlockStmt {
+	lbrace := p.expect(token.LEFT_BRACE)
+	stmts := p.parseStmtList()
+	rbrace := p.expect(token.RIGHT_BRACE)
+
+	return &BlockStmt{
+		LBrace: lbrace,
+		Stmts:  stmts,
+		RBrace: rbrace,
+	}
+}
+
+func (p *Parser) parseFuncMeta(fnName *Ident) *FuncMeta {
+	// fnName := p.parseIdent()
+	// p.expect(token.ASSIGN)
+	// p.expect(token.FN)
+	params := p.parseIdentList()
+
+	return &FuncMeta{
+		FnName: fnName,
+		Params: params,
+	}
+}
+
+func (p *Parser) parseFuncDecl(fnName *Ident) Expr {
+	meta := p.parseFuncMeta(fnName)
+	body := p.parseBlockStmt()
+
+	return &FuncDecl{
+		Meta: meta,
+		Body: body,
+	}
+}
+
+func (p *Parser) parseImportExpr() Expr {
+	pos := p.pos
+	p.next()
+	p.expect(token.LEFT_PAREN)
+
+	if p.kind != token.STRING {
+		p.errorExpected(p.pos, "module_name")
+		// TODO: Advanve to next stmt starter
+		// p.advance(stmtStart)
+		return &BadExpr{From: pos, To: p.pos}
+	}
+
+	unquotedName, _ := strconv.Unquote(p.tokenLit)
+	expr := &ImportExpr{
+		ModuleName: unquotedName,
+		Pos:        pos,
+	}
+
+	p.next()
+	p.expect(token.RIGHT_PAREN)
+	return expr
 }
 
 func (p *Parser) Parse() (*File, error) {
@@ -145,6 +303,11 @@ func (p *Parser) Parse() (*File, error) {
 		p.errors.Sort()
 		err = p.errors.err()
 	}()
+
+	// if p.next() fails in NewParser()
+	if p.errors.Len() > 0 {
+		return nil, p.errors.err()
+	}
 
 	stmts := p.parseStmtList()
 	if p.errors.Len() > 0 {
