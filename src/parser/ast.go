@@ -63,6 +63,21 @@ type (
 		LBrace token.Position
 		RBrace token.Position
 	}
+
+	FuncMeta struct {
+		FnName *Ident
+		Params *IdentList
+	}
+
+	FuncDecl struct {
+		Meta *FuncMeta
+		Body *BlockStmt
+	}
+
+	Ident struct {
+		Name string
+		Pos  token.Position
+	}
 )
 
 func (s *BadStmt) stmtNode()             {}
@@ -83,6 +98,18 @@ func (s *BlockStmt) stmtNode()             {}
 func (s *BlockStmt) Start() token.Position { return s.LBrace }
 func (s *BlockStmt) End() token.Position   { return s.RBrace + 1 }
 
+func (s *FuncMeta) stmtNode()             {}
+func (s *FuncMeta) Start() token.Position { return s.FnName.Pos }
+func (s *FuncMeta) End() token.Position   { return s.Params.End() }
+
+func (s *FuncDecl) stmtNode()             {}
+func (s *FuncDecl) Start() token.Position { return s.Meta.Start() }
+func (s *FuncDecl) End() token.Position   { return s.Body.End() }
+
+func (s *Ident) stmtNode()             {}
+func (s *Ident) Start() token.Position { return s.Pos }
+func (s *Ident) End() token.Position   { return token.Position(int(s.Pos) + len(s.Name)) }
+
 // --- Expressions ---
 
 type (
@@ -96,19 +123,18 @@ type (
 		Pos        token.Position
 	}
 
-	FuncMeta struct {
-		FnName *Ident
-		Params *IdentList
+	CallExpr struct {
+		Func     *Ident
+		LParen   token.Position
+		Args     []Expr
+		Ellipsis token.Position
+		RParen   token.Position
 	}
 
-	FuncDecl struct {
-		Meta *FuncMeta
-		Body *BlockStmt
-	}
-
-	Ident struct {
-		Name string
-		Pos  token.Position
+	StringLit struct {
+		Val     string
+		Literal string
+		Pos     token.Position
 	}
 )
 
@@ -121,14 +147,10 @@ func (e *ImportExpr) Start() token.Position { return e.Pos }
 func (e *ImportExpr) End() token.Position   { return token.Position(int(e.Pos) + len(e.ModuleName) + 10) }
 func (e *ImportExpr) String() string        { return `import("` + e.ModuleName + `")` }
 
-func (e *FuncMeta) exprNode()             {}
-func (e *FuncMeta) Start() token.Position { return e.FnName.Pos }
-func (e *FuncMeta) End() token.Position   { return e.Params.End() }
+func (e *CallExpr) exprNode()             {}
+func (e *CallExpr) Start() token.Position { return e.Func.Start() }
+func (e *CallExpr) End() token.Position   { return e.RParen + 1 }
 
-func (e *FuncDecl) exprNode()             {}
-func (e *FuncDecl) Start() token.Position { return e.Meta.Start() }
-func (e *FuncDecl) End() token.Position   { return e.Body.End() }
-
-func (e *Ident) exprNode()             {}
-func (e *Ident) Start() token.Position { return e.Pos }
-func (e *Ident) End() token.Position   { return token.Position(int(e.Pos) + len(e.Name)) }
+func (e *StringLit) exprNode()             {}
+func (e *StringLit) Start() token.Position { return e.Pos }
+func (e *StringLit) End() token.Position   { return token.Position(int(e.Pos) + len(e.Literal)) }

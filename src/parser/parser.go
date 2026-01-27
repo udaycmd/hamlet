@@ -6,6 +6,7 @@ package parser
 
 import (
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 
@@ -13,23 +14,32 @@ import (
 	"github.com/udaycmd/hamlet/src/token"
 )
 
-type bailout struct{}
+const (
+	indentPattern string = "- - - - - - - - - - - - - - - - - - "
+	patternLen           = len(indentPattern)
+)
 
-type ParseError struct {
-	position token.SrcPos
-	msg      string
-}
+type (
+	StmtStarters map[token.Tok]bool
 
-func (e ParseError) Error() string {
+	bailout struct{}
+
+	ParseError struct {
+		position token.SrcPos
+		msg      string
+	}
+
+	// Slice of [ParseError]
+	ParseErrors []*ParseError
+)
+
+func (e *ParseError) Error() string {
 	if e.position.FileName != "" || e.position.IsValid() {
 		return fmt.Sprintf("Parsing Error: %s\n\tat %s", e.msg, e.position)
 	}
 
 	return fmt.Sprintf("Parsing Error: %s", e.msg)
 }
-
-// Slice of [ParseError]
-type ParseErrors []*ParseError
 
 func (pe ParseErrors) Extend(pos token.SrcPos, msg string) {
 	pe = append(pe, &ParseError{position: pos, msg: msg})
@@ -51,11 +61,7 @@ func (pe ParseErrors) Less(i, j int) bool {
 		return x.Line < y.Line
 	}
 
-	if x.Column != y.Column {
-		return x.Column < y.Column
-	}
-
-	return false
+	return x.Column < y.Column
 }
 
 func (pe ParseErrors) Swap(i, j int) {
@@ -98,10 +104,21 @@ type Parser struct {
 	kind           token.Tok           // current token
 	maxReportError int                 // maximum number of errors to report before parsing termination
 	tokenLit       string              // current token's literal value
+
+	// tracing
+	tracing     bool      // do tracing?
+	traceW      io.Writer // trace output
+	traceIndent int       // trace indentation
 }
 
-func NewParser(file *token.SourceHandle, src []byte, maxReportError int, mode lexer.LexMode) *Parser {
-	p := &Parser{file: file, maxReportError: maxReportError}
+func NewParser(
+	file *token.SourceHandle,
+	src []byte,
+	maxReportError int,
+	mode lexer.LexMode,
+	traceW io.Writer,
+) *Parser {
+	p := &Parser{file: file, maxReportError: maxReportError, tracing: traceW != nil, traceW: traceW}
 
 	lexerErrorHandlerfunc := func(msg string, pos token.SrcPos) {
 		p.errors.Extend(pos, msg)
@@ -109,6 +126,30 @@ func NewParser(file *token.SourceHandle, src []byte, maxReportError int, mode le
 	p.lexer = lexer.NewLexer(p.file, src, lexerErrorHandlerfunc, mode)
 	p.next()
 	return p
+}
+
+func (p *Parser) tracePrint(stringer ...any) {
+	srcPos := p.file.SrcPos(p.pos)
+	fmt.Fprintf(p.traceW, "%5d: %5s: ", p.pos, srcPos.String())
+	i := 3 * p.traceIndent
+	for i > patternLen {
+		fmt.Fprint(p.traceW, indentPattern)
+		i -= patternLen
+	}
+
+	fmt.Fprint(p.traceW, indentPattern[0:i])
+	fmt.Fprintln(p.traceW, stringer...)
+}
+
+func trace(p *Parser, msg string) *Parser {
+	p.tracePrint(msg, "<<")
+	p.traceIndent++
+	return p
+}
+
+func untrace(p *Parser) {
+	p.traceIndent--
+	p.tracePrint(">>")
 }
 
 func (p *Parser) next() {
@@ -154,26 +195,27 @@ func (p *Parser) expect(kind token.Tok) token.Position {
 	return pos
 }
 
-func (p *Parser) parseSimpleStmt(id *Ident) Stmt {
-	// TODO remove this
-	p.next()
-
-	switch p.kind {
-	case token.ASSIGN:
-		// pos, tok := p.pos, p.kind
-		p.next()
-		if p.kind == token.FN {
-			p.parseFuncDecl(id)
-		}
-	}
+func (p *Parser) parseSimpleStmt() Stmt {
+	return nil
 }
 
 func (p *Parser) parseStmt() Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "Stmt"))
+	}
+
 	switch p.kind {
 	case token.IDENTIFIER:
-		s := p.parseSimpleStmt(&Ident{Name: p.tokenLit, Pos: p.pos})
-		return s
+		name := p.parseIdent()
+		if p.kind == token.ASSIGN {
+			p.next() // consume '::'
+			if p.kind == token.FN {
+				return p.parseFuncDecl(name)
+			}
+		}
 	}
+
+	return nil
 }
 
 func (p *Parser) parseStmtList() []Stmt {
@@ -186,6 +228,10 @@ func (p *Parser) parseStmtList() []Stmt {
 }
 
 func (p *Parser) parseIdent() *Ident {
+	if p.tracing {
+		defer untrace(trace(p, "Identifier"))
+	}
+
 	pos := p.pos
 	name := ""
 
@@ -203,6 +249,10 @@ func (p *Parser) parseIdent() *Ident {
 }
 
 func (p *Parser) parseIdentList() *IdentList {
+	if p.tracing {
+		defer untrace(trace(p, "IdentList"))
+	}
+
 	var params []*Ident
 	lparen := p.expect(token.LEFT_PAREN)
 	VarArgs := false
@@ -235,6 +285,10 @@ func (p *Parser) parseIdentList() *IdentList {
 }
 
 func (p *Parser) parseBlockStmt() *BlockStmt {
+	if p.tracing {
+		defer untrace(trace(p, "BlockStmt"))
+	}
+
 	lbrace := p.expect(token.LEFT_BRACE)
 	stmts := p.parseStmtList()
 	rbrace := p.expect(token.RIGHT_BRACE)
@@ -246,20 +300,26 @@ func (p *Parser) parseBlockStmt() *BlockStmt {
 	}
 }
 
-func (p *Parser) parseFuncMeta(fnName *Ident) *FuncMeta {
-	// fnName := p.parseIdent()
-	// p.expect(token.ASSIGN)
-	// p.expect(token.FN)
+func (p *Parser) parseFuncMeta(name *Ident) *FuncMeta {
+	if p.tracing {
+		defer untrace(trace(p, "FuncMeta"))
+	}
+
+	p.expect(token.FN)
 	params := p.parseIdentList()
 
 	return &FuncMeta{
-		FnName: fnName,
+		FnName: name,
 		Params: params,
 	}
 }
 
-func (p *Parser) parseFuncDecl(fnName *Ident) Expr {
-	meta := p.parseFuncMeta(fnName)
+func (p *Parser) parseFuncDecl(name *Ident) *FuncDecl {
+	if p.tracing {
+		defer untrace(trace(p, "FuncDecl"))
+	}
+
+	meta := p.parseFuncMeta(name)
 	body := p.parseBlockStmt()
 
 	return &FuncDecl{
@@ -269,12 +329,16 @@ func (p *Parser) parseFuncDecl(fnName *Ident) Expr {
 }
 
 func (p *Parser) parseImportExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "ImportExpr"))
+	}
+
 	pos := p.pos
 	p.next()
 	p.expect(token.LEFT_PAREN)
 
 	if p.kind != token.STRING {
-		p.errorExpected(p.pos, "module_name")
+		p.errorExpected(p.pos, "<module_name>")
 		// TODO: Advanve to next stmt starter
 		// p.advance(stmtStart)
 		return &BadExpr{From: pos, To: p.pos}
@@ -303,6 +367,10 @@ func (p *Parser) Parse() (*File, error) {
 		p.errors.Sort()
 		err = p.errors.err()
 	}()
+
+	if p.tracing {
+		defer untrace(trace(p, "File"))
+	}
 
 	// if p.next() fails in NewParser()
 	if p.errors.Len() > 0 {

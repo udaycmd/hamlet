@@ -38,7 +38,7 @@ func (sp SrcPos) IsValid() bool {
 func (sp SrcPos) String() string {
 	if sp.IsValid() {
 		s := sp.FileName
-		s += fmt.Sprintf("line %d, column %d", sp.Line, sp.Column)
+		s += fmt.Sprintf(" line %d, column %d", sp.Line, sp.Column)
 		return s
 	}
 

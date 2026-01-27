@@ -9,6 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/udaycmd/hamlet/src/lexer"
+	"github.com/udaycmd/hamlet/src/parser"
+	"github.com/udaycmd/hamlet/src/token"
 )
 
 var (
@@ -52,7 +56,10 @@ func hamlet_main() error {
 	}
 
 	// TODO: Change this
-	fmt.Print(input, "\n", string(data))
+	test := token.NewSourceManager()
+	testFile := test.AddFile(input, -1, len(data))
+	p := parser.NewParser(testFile, data, 10, lexer.NoAsi, os.Stdout)
+	p.Parse()
 
 	return nil
 }
