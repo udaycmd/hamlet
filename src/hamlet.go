@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/udaycmd/hamlet/src/lexer"
 	"github.com/udaycmd/hamlet/src/parser"
@@ -46,11 +45,6 @@ func hamlet_main() error {
 
 	input := flag.Arg(0)
 	data, err := os.ReadFile(input)
-	if err != nil {
-		return err
-	}
-
-	input, err = filepath.Abs(input)
 	if err != nil {
 		return err
 	}

@@ -7,16 +7,13 @@ package parser
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/udaycmd/hamlet/src/lexer"
 	"github.com/udaycmd/hamlet/src/token"
-)
-
-const (
-	indentPattern string = "- - - - - - - - - - - - - - - - - - "
-	patternLen           = len(indentPattern)
 )
 
 type (
@@ -130,26 +127,20 @@ func NewParser(
 
 func (p *Parser) tracePrint(stringer ...any) {
 	srcPos := p.file.SrcPos(p.pos)
-	fmt.Fprintf(p.traceW, "%5d: %5s: ", p.pos, srcPos.String())
-	i := 3 * p.traceIndent
-	for i > patternLen {
-		fmt.Fprint(p.traceW, indentPattern)
-		i -= patternLen
-	}
-
-	fmt.Fprint(p.traceW, indentPattern[0:i])
+	fmt.Fprintf(p.traceW, "%5d: line: %d column: %d ", p.pos, srcPos.Line, srcPos.Column)
+	fmt.Fprint(p.traceW, strings.Repeat(" ", 2*p.traceIndent))
 	fmt.Fprintln(p.traceW, stringer...)
 }
 
 func trace(p *Parser, msg string) *Parser {
-	p.tracePrint(msg, "<<")
+	p.tracePrint(msg, "(")
 	p.traceIndent++
 	return p
 }
 
 func untrace(p *Parser) {
 	p.traceIndent--
-	p.tracePrint(">>")
+	p.tracePrint(")")
 }
 
 func (p *Parser) next() {
@@ -369,6 +360,8 @@ func (p *Parser) Parse() (*File, error) {
 	}()
 
 	if p.tracing {
+		fullPath, _ := filepath.Abs(p.file.Name)
+		fmt.Fprintln(p.traceW, "Ast Trace of", fullPath)
 		defer untrace(trace(p, "File"))
 	}
 
