@@ -99,8 +99,8 @@ type Parser struct {
 	lexer          *lexer.Lexer        // lexer
 	pos            token.Position      // current position in the [token.SourceManager]
 	kind           token.Tok           // current token
-	maxReportError int                 // maximum number of errors to report before parsing termination
 	tokenLit       string              // current token's literal value
+	maxReportError int                 // maximum number of errors to report before parsing termination
 
 	// tracing
 	tracing     bool      // do tracing?
@@ -133,14 +133,13 @@ func (p *Parser) tracePrint(stringer ...any) {
 }
 
 func trace(p *Parser, msg string) *Parser {
-	p.tracePrint(msg, "(")
+	p.tracePrint(msg)
 	p.traceIndent++
 	return p
 }
 
 func untrace(p *Parser) {
 	p.traceIndent--
-	p.tracePrint(")")
 }
 
 func (p *Parser) next() {
@@ -361,7 +360,7 @@ func (p *Parser) Parse() (*File, error) {
 
 	if p.tracing {
 		fullPath, _ := filepath.Abs(p.file.Name)
-		fmt.Fprintln(p.traceW, "Ast Trace of", fullPath)
+		fmt.Fprintln(p.traceW, "AST Trace of", fullPath)
 		defer untrace(trace(p, "File"))
 	}
 

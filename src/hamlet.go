@@ -26,15 +26,17 @@ func printVersion() {
 
 func help() {
 	printVersion()
-	fmt.Println("Copyright (C) 2025 Uday Tiwari")
+	fmt.Println("Copyright (C) 2026 Uday Tiwari")
 	fmt.Println("Usage: hamlet [option] ... [file] [filearg] ...")
 	fmt.Println("Options:")
 	flag.PrintDefaults()
 }
 
 func hamlet_main() error {
+	flag.Usage = help
+
 	if showHelp {
-		help()
+		flag.Usage()
 		return nil
 	}
 
@@ -69,6 +71,6 @@ func main() {
 func init() {
 	flag.BoolVar(&showVersion, "version", false, "print the Hamlet version number and exit")
 	flag.BoolVar(&showHelp, "help", false, "print help")
-	flag.IntVar(&maxShowErrors, "maxerr", 5, "maximum numbers of errors to show")
+	flag.IntVar(&maxShowErrors, "max-errors", 5, "maximum numbers of errors to show")
 	flag.Parse()
 }
