@@ -75,6 +75,17 @@ type (
 		Name string
 		Pos  token.Position
 	}
+
+	BranchStmt struct {
+		Kind  token.Tok
+		Pos   token.Position
+		Label *Ident
+	}
+
+	ReturnStmt struct {
+		Ret token.Position
+		e   Expr
+	}
 )
 
 func (s *BadStmt) stmtNode()             {}
@@ -103,6 +114,20 @@ func (s *Ident) stmtNode()             {}
 func (s *Ident) Start() token.Position { return s.Pos }
 func (s *Ident) End() token.Position   { return token.Position(int(s.Pos) + len(s.Name)) }
 
+func (s *BranchStmt) stmtNode()             {}
+func (s *BranchStmt) Start() token.Position { return s.Pos }
+func (s *BranchStmt) End() token.Position {
+	if s.Label != nil {
+		return s.Label.End()
+	}
+
+	return token.Position(int(s.Pos) + len(s.Kind.String()))
+}
+
+func (s *ReturnStmt) stmtNode()             {}
+func (s *ReturnStmt) Start() token.Position { return s.Ret }
+func (s *ReturnStmt) End() token.Position   { return s.e.End() }
+
 // --- Expressions ---
 
 type (
@@ -117,7 +142,7 @@ type (
 	}
 
 	CallExpr struct {
-		Proc     *Ident
+		Proc     Expr
 		LParen   token.Position
 		Args     []Expr
 		Ellipsis token.Position

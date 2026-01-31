@@ -185,6 +185,17 @@ func (p *Parser) expect(kind token.Tok) token.Position {
 	return pos
 }
 
+func (p *Parser) expectSemicolon() {
+	switch p.kind {
+	case token.SEMICOLON:
+		p.next()
+	case token.RIGHT_BRACE, token.RIGHT_PAREN:
+	default:
+		p.errorExpected(p.pos, "';'")
+		// p.advance(stmtStart)
+	}
+}
+
 func (p *Parser) parseSimpleStmt() Stmt {
 	return nil
 }
@@ -197,6 +208,14 @@ func (p *Parser) parseStmt() Stmt {
 	switch p.kind {
 	case token.PROC:
 		return p.parseProcStmt()
+	case token.RETURN:
+		return p.parseReturnStmt()
+	case token.SEMICOLON:
+		s := &EmptyStmt{Semicolon: p.pos, IsImplicit: p.tokenLit == "\n"}
+		p.next()
+		return s
+	case token.BREAK, token.CONTINUE:
+		return p.parseBranchStmt(p.kind)
 	}
 
 	return nil
@@ -229,6 +248,45 @@ func (p *Parser) parseIdent() *Ident {
 	return &Ident{
 		Name: name,
 		Pos:  pos,
+	}
+}
+
+func (p *Parser) parseReturnStmt() Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "ReturnStmt"))
+	}
+
+	pos := p.pos
+	p.expect(token.RETURN)
+
+	var x Expr
+	if p.kind != token.SEMICOLON && p.kind != token.RIGHT_BRACE {
+		x = p.parseExpr()
+	}
+
+	p.expectSemicolon()
+	return &ReturnStmt{
+		Ret: pos,
+		e:   x,
+	}
+}
+
+func (p *Parser) parseBranchStmt(tok token.Tok) Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "BranchStmt"))
+	}
+
+	pos := p.expect(tok)
+	var label *Ident
+	if p.kind == token.IDENTIFIER {
+		label = p.parseIdent()
+	}
+
+	p.expectSemicolon()
+	return &BranchStmt{
+		Kind:  p.kind,
+		Pos:   pos,
+		Label: label,
 	}
 }
 
@@ -299,6 +357,41 @@ func (p *Parser) parseProcStmt() *ProcStmt {
 		ProcName: procName,
 		Params:   params,
 		Body:     body,
+	}
+}
+
+func (p *Parser) parseExpr() Expr {
+	return nil
+}
+
+func (p *Parser) parseCallExpr(x Expr) *CallExpr {
+	if p.tracing {
+		defer untrace(trace(p, "CallExpr"))
+	}
+
+	lparen := p.expect(token.LEFT_PAREN)
+
+	var list []Expr
+	var ellipsis token.Position
+	for p.kind != token.RIGHT_PAREN && p.kind != token.EOF && !ellipsis.IsValid() {
+		list = append(list, p.parseExpr())
+		if p.kind == token.DOT_DOT_DOT {
+			ellipsis = p.pos
+			p.next()
+		}
+
+		if !p.expectComma() {
+			break
+		}
+	}
+
+	rparen := p.expect(token.RIGHT_PAREN)
+	return &CallExpr{
+		Proc:     x,
+		LParen:   lparen,
+		RParen:   rparen,
+		Ellipsis: ellipsis,
+		Args:     list,
 	}
 }
 

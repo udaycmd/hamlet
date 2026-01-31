@@ -1,1 +1,3 @@
-proc main(a, b, c, d) {}
+proc main(a, b, c, d) {
+
+}

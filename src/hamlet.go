@@ -46,8 +46,16 @@ func hamlet_main() error {
 	}
 
 	input := flag.Arg(0)
+	if input == "" {
+		return fmt.Errorf("no input provided")
+	}
+
 	data, err := os.ReadFile(input)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%s: No such file found", input)
+		}
+
 		return err
 	}
 
@@ -62,7 +70,7 @@ func hamlet_main() error {
 
 func main() {
 	if err := hamlet_main(); err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", "\033[31mError\033[0m", err)
+		fmt.Fprintf(os.Stderr, "\033[1;31merror: \033[0m%v\n", err)
 		os.Exit(1)
 	}
 }

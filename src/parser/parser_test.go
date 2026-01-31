@@ -13,7 +13,7 @@ import (
 
 var testSrcManager = token.NewSourceManager()
 
-func TestFuncDecl(t *testing.T) {
+func TestProcStmt(t *testing.T) {
 	input := `
 proc main(a, b, c) {
 }
