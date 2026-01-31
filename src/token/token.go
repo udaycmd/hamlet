@@ -18,19 +18,18 @@ const (
 	DEFAULT
 	ELSE
 	ENUM
-	FN
+	PROC
 	FOR
 	IMPORT
 	EXPORT
-	INTERFACE
 	IF
 	IN
 	MAP
 	RETURN
-	STRUCT
+	CONCEPT
 	SWITCH
-	TYPE
-	VAR
+	TYPE_INFO
+	DECL
 	TRUE
 	FALSE
 	EMPTY
@@ -38,7 +37,6 @@ const (
 	_OpBegin
 
 	// - Operators -
-	ARROW
 	PLUS
 	MINUS
 	STAR
@@ -60,13 +58,12 @@ const (
 	NOT_EQ_BIT
 	LSHIFT_EQ
 	RSHIFT_EQ
-	EQUAL
 	ASSIGN
+	EQUALS
 	AND
 	OR
 	BANG
 	BANG_EQ
-	EQUAL_EQUAL
 	LESS
 	GREATER
 	LESS_EQ
@@ -75,9 +72,10 @@ const (
 
 	_OpEnd
 
-	_PunBegin
+	_PuncBegin
 
 	// - Punctuations -
+	ARROW
 	LEFT_PAREN
 	RIGHT_PAREN
 	LEFT_BRACKET
@@ -87,11 +85,12 @@ const (
 	COMMA
 	SEMICOLON
 	COLON
+	DOUBLE_COLON
 	DOT
 	DOT_DOT
 	DOT_DOT_DOT
 
-	_PunEnd
+	_PuncEnd
 
 	// - Literals -
 	IDENTIFIER
@@ -108,19 +107,18 @@ var keywords = map[string]Tok{
 	"default":   DEFAULT,
 	"else":      ELSE,
 	"enum":      ENUM,
-	"fn":        FN,
+	"proc":      PROC,
 	"for":       FOR,
 	"import":    IMPORT,
 	"export":    EXPORT,
-	"interface": INTERFACE,
 	"if":        IF,
 	"in":        IN,
 	"map":       MAP,
 	"return":    RETURN,
-	"struct":    STRUCT,
+	"concept":   CONCEPT,
 	"switch":    SWITCH,
-	"type":      TYPE,
-	"var":       VAR,
+	"type_info": TYPE_INFO,
+	"decl":      DECL,
 	"true":      TRUE,
 	"false":     FALSE,
 	"empty":     EMPTY,
@@ -131,7 +129,7 @@ func (t Tok) IsOperator() bool {
 }
 
 func (t Tok) IsPunctuator() bool {
-	return t < _PunEnd && t > _PunBegin
+	return t < _PuncEnd && t > _PuncBegin
 }
 
 var tokens = [...]string{
@@ -157,8 +155,8 @@ var tokens = [...]string{
 	NOT_EQ_BIT:    "~=",
 	LSHIFT_EQ:     "<<=",
 	RSHIFT_EQ:     ">>=",
-	EQUAL:         "=",
-	ASSIGN:        "::",
+	EQUALS:        "==",
+	ASSIGN:        "=",
 	AND:           "&&",
 	OR:            "||",
 	BANG:          "!",
@@ -177,6 +175,7 @@ var tokens = [...]string{
 	COMMA:         ",",
 	SEMICOLON:     ";",
 	COLON:         ":",
+	DOUBLE_COLON:  "::",
 	DOT:           ".",
 	DOT_DOT:       "..",
 	DOT_DOT_DOT:   "...",

@@ -64,14 +64,11 @@ type (
 		RBrace token.Position
 	}
 
-	FuncMeta struct {
-		FnName *Ident
-		Params *IdentList
-	}
-
-	FuncDecl struct {
-		Meta *FuncMeta
-		Body *BlockStmt
+	ProcStmt struct {
+		Proc     token.Position
+		ProcName *Ident
+		Params   *IdentList
+		Body     *BlockStmt
 	}
 
 	Ident struct {
@@ -98,13 +95,9 @@ func (s *BlockStmt) stmtNode()             {}
 func (s *BlockStmt) Start() token.Position { return s.LBrace }
 func (s *BlockStmt) End() token.Position   { return s.RBrace + 1 }
 
-func (s *FuncMeta) stmtNode()             {}
-func (s *FuncMeta) Start() token.Position { return s.FnName.Pos }
-func (s *FuncMeta) End() token.Position   { return s.Params.End() }
-
-func (s *FuncDecl) stmtNode()             {}
-func (s *FuncDecl) Start() token.Position { return s.Meta.Start() }
-func (s *FuncDecl) End() token.Position   { return s.Body.End() }
+func (s *ProcStmt) stmtNode()             {}
+func (s *ProcStmt) Start() token.Position { return s.Proc }
+func (s *ProcStmt) End() token.Position   { return s.Body.End() }
 
 func (s *Ident) stmtNode()             {}
 func (s *Ident) Start() token.Position { return s.Pos }
@@ -124,7 +117,7 @@ type (
 	}
 
 	CallExpr struct {
-		Func     *Ident
+		Proc     *Ident
 		LParen   token.Position
 		Args     []Expr
 		Ellipsis token.Position
@@ -148,7 +141,7 @@ func (e *ImportExpr) End() token.Position   { return token.Position(int(e.Pos) +
 func (e *ImportExpr) String() string        { return `import("` + e.ModuleName + `")` }
 
 func (e *CallExpr) exprNode()             {}
-func (e *CallExpr) Start() token.Position { return e.Func.Start() }
+func (e *CallExpr) Start() token.Position { return e.Proc.Start() }
 func (e *CallExpr) End() token.Position   { return e.RParen + 1 }
 
 func (e *StringLit) exprNode()             {}

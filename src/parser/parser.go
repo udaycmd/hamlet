@@ -195,14 +195,8 @@ func (p *Parser) parseStmt() Stmt {
 	}
 
 	switch p.kind {
-	case token.IDENTIFIER:
-		name := p.parseIdent()
-		if p.kind == token.ASSIGN {
-			p.next() // consume '::'
-			if p.kind == token.FN {
-				return p.parseFuncDecl(name)
-			}
-		}
+	case token.PROC:
+		return p.parseProcStmt()
 	}
 
 	return nil
@@ -229,7 +223,7 @@ func (p *Parser) parseIdent() *Ident {
 		name = p.tokenLit
 		p.next()
 	} else {
-		p.expect(token.IDENTIFIER)
+		return nil
 	}
 
 	return &Ident{
@@ -290,31 +284,21 @@ func (p *Parser) parseBlockStmt() *BlockStmt {
 	}
 }
 
-func (p *Parser) parseFuncMeta(name *Ident) *FuncMeta {
+func (p *Parser) parseProcStmt() *ProcStmt {
 	if p.tracing {
-		defer untrace(trace(p, "FuncMeta"))
+		defer untrace(trace(p, "ProcStmt"))
 	}
 
-	p.expect(token.FN)
+	proc := p.expect(token.PROC)
+	procName := p.parseIdent()
 	params := p.parseIdentList()
-
-	return &FuncMeta{
-		FnName: name,
-		Params: params,
-	}
-}
-
-func (p *Parser) parseFuncDecl(name *Ident) *FuncDecl {
-	if p.tracing {
-		defer untrace(trace(p, "FuncDecl"))
-	}
-
-	meta := p.parseFuncMeta(name)
 	body := p.parseBlockStmt()
 
-	return &FuncDecl{
-		Meta: meta,
-		Body: body,
+	return &ProcStmt{
+		Proc:     proc,
+		ProcName: procName,
+		Params:   params,
+		Body:     body,
 	}
 }
 
@@ -360,7 +344,7 @@ func (p *Parser) Parse() (*File, error) {
 
 	if p.tracing {
 		fullPath, _ := filepath.Abs(p.file.Name)
-		fmt.Fprintln(p.traceW, "AST Trace of", fullPath)
+		fmt.Fprintf(p.traceW, "AST Trace of (%s)\n\n", fullPath)
 		defer untrace(trace(p, "File"))
 	}
 

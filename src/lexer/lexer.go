@@ -446,15 +446,19 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 			asi = true
 		case ',':
 			tok = token.COMMA
-		case '=':
-			tok = token.EQUAL
 		case ';':
 			tok = token.SEMICOLON
 			lit = ";"
 		case ':':
 			tok = token.COLON
 			if l.cc == ':' {
-				tok = token.ASSIGN
+				tok = token.DOUBLE_COLON
+				l.next()
+			}
+		case '=':
+			tok = token.ASSIGN
+			if l.cc == '=' {
+				tok = token.EQUALS
 				l.next()
 			}
 		case '+':

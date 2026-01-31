@@ -15,7 +15,7 @@ var testSrcManager = token.NewSourceManager()
 
 func TestFuncDecl(t *testing.T) {
 	input := `
-main :: fn(a, b, c) {
+proc main(a, b, c) {
 }
 `
 	testFile := testSrcManager.AddFile("testfile", -1, len(input))
@@ -30,16 +30,16 @@ main :: fn(a, b, c) {
 		t.Fatalf("expected 1 statement, got %d", len(f.Statements))
 	}
 
-	funcDecl, ok := f.Statements[0].(*FuncDecl)
+	procStmt, ok := f.Statements[0].(*ProcStmt)
 	if !ok {
-		t.Fatalf("expected FuncDecl, got %T", f.Statements[0])
+		t.Fatalf("expected ProcStmt, got %T", f.Statements[0])
 	}
 
-	if funcDecl.Meta.FnName.Name != "main" {
-		t.Errorf("expected function name 'main', got '%s'", funcDecl.Meta.FnName.Name)
+	if procStmt.ProcName.Name != "main" {
+		t.Errorf("expected function name 'main', got '%s'", procStmt.ProcName.Name)
 	}
 
-	if len(funcDecl.Meta.Params.List) != 3 {
-		t.Errorf("expected 3 parameters, got %d", len(funcDecl.Meta.Params.List))
+	if len(procStmt.Params.List) != 3 {
+		t.Errorf("expected 3 parameters, got %d", len(procStmt.Params.List))
 	}
 }
