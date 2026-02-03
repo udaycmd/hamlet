@@ -193,6 +193,8 @@ func (p *Parser) error(pos token.Position, msg string) {
 }
 
 func (p *Parser) errorExpected(pos token.Position, msg string) {
+	msg = "expected " + msg
+
 	if pos == p.pos {
 		switch {
 		case p.kind == token.SEMICOLON && p.tokenLit == "\n":
@@ -209,7 +211,7 @@ func (p *Parser) expect(kind token.Tok) token.Position {
 	pos := p.pos
 
 	if p.kind != kind {
-		p.errorExpected(pos, "expected "+"'"+kind.String()+"'")
+		p.errorExpected(pos, "<"+kind.String()+">")
 	}
 
 	p.next()
@@ -291,7 +293,7 @@ func (p *Parser) parseIdent() *Ident {
 		name = p.tokenLit
 		p.next()
 	} else {
-		return nil
+		p.expect(token.IDENTIFIER)
 	}
 
 	return &Ident{
@@ -406,6 +408,22 @@ func (p *Parser) parseProcStmt() *ProcStmt {
 		ProcName: procName,
 		Params:   params,
 		Body:     body,
+	}
+}
+
+func (p *Parser) parseProcLit() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "ProcLit"))
+	}
+
+	proc := p.expect(token.PROC)
+	params := p.parseIdentList()
+	body := p.parseBlockStmt()
+
+	return &ProcLit{
+		Proc:   proc,
+		Params: params,
+		Body:   body,
 	}
 }
 
@@ -555,13 +573,27 @@ func (p *Parser) parsePrimaryExpr() Expr {
 		defer untrace(trace(p, "PrimaryExpr"))
 	}
 
-	x := p.parseOperand()
+	x := p.parseLiteralOrSubExpr()
 
 loop:
 	for {
 		switch p.kind {
+		case token.LEFT_BRACKET:
+			x = p.parseIndexerExpr(x)
 		case token.LEFT_PAREN:
 			x = p.parseCallExpr(x)
+		case token.DOT:
+			p.next()
+
+			switch p.kind {
+			case token.IDENTIFIER:
+				x = p.parseReceiverExpr(x)
+			default:
+				pos := p.pos
+				p.errorExpected(pos, "<receiver>")
+				p.synchronize(stmtStarters)
+				return &BadExpr{From: pos, To: p.pos}
+			}
 		default:
 			break loop
 		}
@@ -570,12 +602,109 @@ loop:
 	return x
 }
 
-func (p *Parser) parseOperand() Expr {
+func (p *Parser) parseIndexerExpr(x Expr) Expr {
 	if p.tracing {
-		defer untrace(trace(p, "Operand"))
+		defer untrace(trace(p, "IndexerExpr"))
+	}
+
+	lbrack := p.expect(token.LEFT_BRACKET)
+
+	// [e1:e2]
+	var indices [2]Expr
+	if p.kind != token.COLON {
+		// parse e1, if present
+		indices[0] = p.parseExpr()
+	}
+
+	colons := 0
+	if p.kind == token.COLON {
+		colons += 1
+		p.next()
+
+		// parse e2, if present
+		if p.kind != token.LEFT_BRACKET && p.kind != token.EOF {
+			indices[1] = p.parseExpr()
+		}
+	}
+
+	rbrack := p.expect(token.RIGHT_BRACKET)
+
+	// a slice, if it has a colon present
+	if colons > 0 {
+		return &SliceExpr{
+			X:     x,
+			LBrac: lbrack,
+			Lo:    indices[0],
+			Hi:    indices[1],
+			Rbrac: rbrack,
+		}
+	}
+
+	return &IndexExpr{
+		X:     x,
+		LBrac: lbrack,
+		Index: indices[0],
+		Rbrac: rbrack,
+	}
+}
+
+func (p *Parser) parseReceiverExpr(x Expr) Expr {
+	if p.tracing {
+		defer untrace(trace(p, "ReceiverExpr"))
+	}
+
+	recv := p.parseIdent()
+	return &ReceiverExpr{
+		X:  x,
+		Id: recv,
+	}
+}
+
+func (p *Parser) parseLiteralOrSubExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "LiteralOrSubExpr"))
 	}
 
 	switch p.kind {
+	case token.EMPTY:
+		x := &EmptyLit{Pos: p.pos}
+
+		p.next()
+		return x
+	case token.CHAR:
+		return p.parseCharLit()
+	case token.STRING:
+		unquoted, _ := strconv.Unquote(p.tokenLit)
+		x := &StringLit{
+			Val:     unquoted,
+			Literal: p.tokenLit,
+			Pos:     p.pos,
+		}
+
+		p.next()
+		return x
+	case token.TRUE:
+		x := &BoolLit{
+			Val:     true,
+			Literal: p.tokenLit,
+			Pos:     p.pos,
+		}
+
+		p.next()
+		return x
+	case token.FALSE:
+		x := &BoolLit{
+			Val:     false,
+			Literal: p.tokenLit,
+			Pos:     p.pos,
+		}
+
+		p.next()
+		return x
+	case token.PROC:
+		return p.parseProcLit()
+	case token.IMPORT:
+		return p.parseImportExpr()
 	case token.IDENTIFIER:
 		return p.parseIdent()
 	case token.LEFT_PAREN:
@@ -590,7 +719,7 @@ func (p *Parser) parseOperand() Expr {
 			Rparen: rparen,
 		}
 	default:
-		p.errorExpected(p.pos, "<operand>")
+		p.errorExpected(p.pos, "<expr>")
 	}
 
 	// something is wrong!
@@ -631,6 +760,30 @@ func (p *Parser) parseCallExpr(x Expr) *CallExpr {
 	}
 }
 
+func (p *Parser) parseCharLit() Expr {
+	if n := len(p.tokenLit); n >= 3 {
+		cp, _, _, err := strconv.UnquoteChar(p.tokenLit[1:n-1], '\'')
+		if err == nil {
+			x := &CharLit{
+				Val:     cp,
+				Literal: p.tokenLit,
+				Pos:     p.pos,
+			}
+
+			p.next()
+			return x
+		}
+	}
+
+	pos := p.pos
+	p.error(pos, "invalid character literal")
+	p.next()
+	return &BadExpr{
+		From: pos,
+		To:   p.pos,
+	}
+}
+
 func (p *Parser) parseImportExpr() Expr {
 	if p.tracing {
 		defer untrace(trace(p, "ImportExpr"))
@@ -655,6 +808,21 @@ func (p *Parser) parseImportExpr() Expr {
 	p.next()
 	p.expect(token.RIGHT_PAREN)
 	return expr
+}
+
+func (p *Parser) parseExportStmt() Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "ExportStmt"))
+	}
+
+	pos := p.pos
+	p.expect(token.EXPORT)
+	x := p.parseExpr()
+	p.expectSemicolon()
+	return &ExportStmt{
+		Pos: pos,
+		e:   x,
+	}
 }
 
 func (p *Parser) Parse() (*File, error) {

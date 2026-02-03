@@ -85,6 +85,11 @@ type (
 		Ret token.Position
 		e   Expr
 	}
+
+	ExportStmt struct {
+		Pos token.Position
+		e   Expr
+	}
 )
 
 func (s *BadStmt) stmtNode()             {}
@@ -123,6 +128,10 @@ func (s *ReturnStmt) stmtNode()             {}
 func (s *ReturnStmt) Start() token.Position { return s.Ret }
 func (s *ReturnStmt) End() token.Position   { return s.e.End() }
 
+func (s *ExportStmt) stmtNode()             {}
+func (s *ExportStmt) Start() token.Position { return s.Pos }
+func (s *ExportStmt) End() token.Position   { return s.e.End() }
+
 // --- Expressions ---
 
 type (
@@ -149,10 +158,32 @@ type (
 		RParen   token.Position
 	}
 
+	EmptyLit struct {
+		Pos token.Position
+	}
+
+	CharLit struct {
+		Val     rune
+		Literal string
+		Pos     token.Position
+	}
+
 	StringLit struct {
 		Val     string
 		Literal string
 		Pos     token.Position
+	}
+
+	BoolLit struct {
+		Val     bool
+		Literal string
+		Pos     token.Position
+	}
+
+	ProcLit struct {
+		Proc   token.Position
+		Params *IdentList
+		Body   *BlockStmt
 	}
 
 	BinaryExpr struct {
@@ -173,6 +204,26 @@ type (
 		X      Expr
 		Rparen token.Position
 	}
+
+	IndexExpr struct {
+		X     Expr
+		LBrac token.Position
+		Index Expr
+		Rbrac token.Position
+	}
+
+	SliceExpr struct {
+		X     Expr
+		LBrac token.Position
+		Lo    Expr
+		Hi    Expr
+		Rbrac token.Position
+	}
+
+	ReceiverExpr struct {
+		X  Expr
+		Id *Ident
+	}
 )
 
 func (e *BadExpr) exprNode()             {}
@@ -192,9 +243,25 @@ func (e *CallExpr) exprNode()             {}
 func (e *CallExpr) Start() token.Position { return e.Proc.Start() }
 func (e *CallExpr) End() token.Position   { return e.RParen + 1 }
 
+func (e *EmptyLit) exprNode()             {}
+func (e *EmptyLit) Start() token.Position { return e.Pos }
+func (e *EmptyLit) End() token.Position   { return e.Pos + token.Position(5) }
+
+func (e *CharLit) exprNode()             {}
+func (e *CharLit) Start() token.Position { return e.Pos }
+func (e *CharLit) End() token.Position   { return e.Pos + token.Position(len(e.Literal)) }
+
 func (e *StringLit) exprNode()             {}
 func (e *StringLit) Start() token.Position { return e.Pos }
-func (e *StringLit) End() token.Position   { return token.Position(int(e.Pos) + len(e.Literal)) }
+func (e *StringLit) End() token.Position   { return e.Pos + token.Position(len(e.Literal)) }
+
+func (e *BoolLit) exprNode()             {}
+func (e *BoolLit) Start() token.Position { return e.Pos }
+func (e *BoolLit) End() token.Position   { return e.Pos + token.Position(len(e.Literal)) }
+
+func (e *ProcLit) exprNode()             {}
+func (e *ProcLit) Start() token.Position { return e.Proc }
+func (e *ProcLit) End() token.Position   { return e.Proc + e.Body.End() }
 
 func (e *BinaryExpr) exprNode()             {}
 func (e *BinaryExpr) Start() token.Position { return e.Lhs.Start() }
@@ -207,3 +274,15 @@ func (e *UnaryExpr) End() token.Position   { return e.X.End() }
 func (e *GroupedExpr) exprNode()             {}
 func (e *GroupedExpr) Start() token.Position { return e.Lparen }
 func (e *GroupedExpr) End() token.Position   { return e.Rparen }
+
+func (e *IndexExpr) exprNode()             {}
+func (e *IndexExpr) Start() token.Position { return e.X.Start() }
+func (e *IndexExpr) End() token.Position   { return e.Rbrac }
+
+func (e *SliceExpr) exprNode()             {}
+func (e *SliceExpr) Start() token.Position { return e.X.Start() }
+func (e *SliceExpr) End() token.Position   { return e.Rbrac }
+
+func (e *ReceiverExpr) exprNode()             {}
+func (e *ReceiverExpr) Start() token.Position { return e.X.Start() }
+func (e *ReceiverExpr) End() token.Position   { return e.Id.Pos + token.Position(len(e.Id.Name)) }

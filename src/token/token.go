@@ -179,12 +179,12 @@ var tokens = [...]string{
 	DOT:           ".",
 	DOT_DOT:       "..",
 	DOT_DOT_DOT:   "...",
-	IDENTIFIER:    "[identifier]",
-	INTEGER:       "[integer]",
-	REAL:          "[real]",
-	CHAR:          "[char]",
-	STRING:        "[string]",
-	EOF:           "[EOF]",
+	IDENTIFIER:    "identifier",
+	INTEGER:       "integer",
+	REAL:          "real",
+	CHAR:          "char",
+	STRING:        "string",
+	EOF:           "eof",
 }
 
 func (t Tok) String() string {
