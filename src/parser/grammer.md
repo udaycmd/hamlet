@@ -8,15 +8,17 @@
 
 **NumericalLiteral** &rarr; _one-of { real | integer }_
 
-**BinOp** &rarr; _one-of { EqualityOp | ComparisonOp | TermOp | FactorOp }_
+**BinOp** &rarr; _one-of { EqualityOp | ComparisonOp | LogicalOp | TermOp | FactorOp }_
 
 **EqualityOp** &rarr; _one-of { '==' | '!=' }_
 
 **ComparisonOp** &rarr; _one-of { '<' | '<=' | '>' | '>=' }_
 
+**LogicalOp** &rarr; _one-of { '||' | '&&' | '|' | '&' }_
+
 **TermOp** &rarr; _one-of { '+' | '-' }_
 
-**FactorOp** &rarr; _one-of { '*' | '/' }_
+**FactorOp** &rarr; _one-of { '\*' | '/' }_
 
 **UniOp** &rarr; _one-of { '~' | '!' }_
 
@@ -24,7 +26,9 @@
 
 **EqualityExpression** &rarr; _ComparisonExpression zero-or-more-of { one-of EqualityOp ComparisonExpression }_
 
-**ComparisonExpression** &rarr; _TermExpression zero-or-more-of { one-of ComparisonOp TermExpression }_
+**ComparisonExpression** &rarr; _LogicalExpression zero-or-more-of { one-of ComparisonOp LogicalExpression }_
+
+**LogicalExpression** &rarr; _TermExpression zero-or-more-of { one-of LogicalOp TermExpression }_
 
 **TermExpression** &rarr; _FactorizedExpression zero-or-more-of { one-of TermOp FactorizedExpression }_
 
@@ -32,9 +36,9 @@
 
 **UnaryExpression** &rarr; _one-of { one-of UniOp UnaryExpression | PrimaryExpression }_
 
-**PrimaryExpression** &rarr; _one-of { Literal | '(' Expression ')' }_
+**PrimaryExpression** &rarr; _one-of { Literal | '(' Expression ')' | Identifier }_
 
-**Empty** &rarr; _{ }_ 
+**Empty** &rarr; _{ }_
 
 **IdentifierList** &rarr; _one-of { NonEmptyIdentifierList | Empty }_
 

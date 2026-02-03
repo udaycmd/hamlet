@@ -410,7 +410,193 @@ func (p *Parser) parseProcStmt() *ProcStmt {
 }
 
 func (p *Parser) parseExpr() Expr {
-	return nil
+	if p.tracing {
+		defer untrace(trace(p, "Expr"))
+	}
+
+	return p.parseEqualityExpr()
+}
+
+func (p *Parser) parseEqualityExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "EqualityExpr"))
+	}
+
+	lhs := p.parseComparisonExpr()
+	for p.kind == token.EQUALS || p.kind == token.BANG_EQ {
+		opKind, opPos := p.kind, p.pos
+		p.next()
+
+		rhs := p.parseComparisonExpr()
+		lhs = &BinaryExpr{
+			Lhs:   lhs,
+			Op:    opKind,
+			OpPos: opPos,
+			Rhs:   rhs,
+		}
+	}
+
+	return lhs
+}
+
+func (p *Parser) parseComparisonExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "ComparisonExpr"))
+	}
+
+	lhs := p.parseLogicalExpr()
+	for p.kind == token.LESS || p.kind == token.GREATER ||
+		p.kind == token.LESS_EQ || p.kind == token.GREATER_EQ {
+		opKind, opPos := p.kind, p.pos
+		p.next()
+
+		rhs := p.parseLogicalExpr()
+		lhs = &BinaryExpr{
+			Lhs:   lhs,
+			Op:    opKind,
+			OpPos: opPos,
+			Rhs:   rhs,
+		}
+	}
+
+	return lhs
+}
+
+func (p *Parser) parseLogicalExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "LogicalExpr"))
+	}
+
+	lhs := p.parseTermExpr()
+	for p.kind == token.AND || p.kind == token.OR ||
+		p.kind == token.CARET || p.kind == token.AMPERSAND || p.kind == token.PIPE {
+		opKind, opPos := p.kind, p.pos
+		p.next()
+
+		rhs := p.parseTermExpr()
+		lhs = &BinaryExpr{
+			Lhs:   lhs,
+			Op:    opKind,
+			OpPos: opPos,
+			Rhs:   rhs,
+		}
+	}
+
+	return lhs
+}
+
+func (p *Parser) parseTermExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "TermExpr"))
+	}
+
+	lhs := p.parseFactorizedExpr()
+	for p.kind == token.PLUS || p.kind == token.MINUS {
+		opKind, opPos := p.kind, p.pos
+		p.next()
+
+		rhs := p.parseFactorizedExpr()
+		lhs = &BinaryExpr{
+			Lhs:   lhs,
+			Op:    opKind,
+			OpPos: opPos,
+			Rhs:   rhs,
+		}
+	}
+
+	return lhs
+}
+
+func (p *Parser) parseFactorizedExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "FactorizedExpr"))
+	}
+
+	lhs := p.parseUnaryExpr()
+	for p.kind == token.STAR || p.kind == token.SLASH {
+		opKind, opPos := p.kind, p.pos
+		p.next()
+
+		rhs := p.parseUnaryExpr()
+		lhs = &BinaryExpr{
+			Lhs:   lhs,
+			Op:    opKind,
+			OpPos: opPos,
+			Rhs:   rhs,
+		}
+	}
+
+	return lhs
+}
+
+func (p *Parser) parseUnaryExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "UnaryExpr"))
+	}
+
+	switch p.kind {
+	case token.TILDE, token.BANG:
+		opKind, opPos := p.kind, p.pos
+		p.next()
+
+		x := p.parseUnaryExpr()
+		return &UnaryExpr{
+			Op:    opKind,
+			OpPos: opPos,
+			X:     x,
+		}
+	}
+
+	return p.parsePrimaryExpr()
+}
+
+func (p *Parser) parsePrimaryExpr() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "PrimaryExpr"))
+	}
+
+	x := p.parseOperand()
+
+loop:
+	for {
+		switch p.kind {
+		case token.LEFT_PAREN:
+			x = p.parseCallExpr(x)
+		default:
+			break loop
+		}
+	}
+
+	return x
+}
+
+func (p *Parser) parseOperand() Expr {
+	if p.tracing {
+		defer untrace(trace(p, "Operand"))
+	}
+
+	switch p.kind {
+	case token.IDENTIFIER:
+		return p.parseIdent()
+	case token.LEFT_PAREN:
+		lparen := p.pos
+		p.next()
+		x := p.parseExpr()
+		rparen := p.expect(token.RIGHT_PAREN)
+
+		return &GroupedExpr{
+			Lparen: lparen,
+			X:      x,
+			Rparen: rparen,
+		}
+	default:
+		p.errorExpected(p.pos, "<operand>")
+	}
+
+	// something is wrong!
+	pos := p.pos
+	p.synchronize(stmtStarters)
+	return &BadExpr{From: pos, To: p.pos}
 }
 
 func (p *Parser) parseCallExpr(x Expr) *CallExpr {
@@ -486,7 +672,7 @@ func (p *Parser) Parse() (*File, error) {
 
 	if p.tracing {
 		fullPath, _ := filepath.Abs(p.file.Name)
-		fmt.Fprintf(p.traceW, "AST Trace of (%s)\n\n", fullPath)
+		fmt.Fprintf(p.traceW, "AST Trace of [%s]\n\n", fullPath)
 		defer untrace(trace(p, "File"))
 	}
 

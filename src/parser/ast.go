@@ -6,12 +6,16 @@ package parser
 
 import "github.com/udaycmd/hamlet/src/token"
 
+// --- AST Nodes ---
+
 type Node interface {
 	Start() token.Position
 	End() token.Position
 }
 
 type (
+	// Expression is an ast node in hamlet
+	// that is evaluated to determine its value
 	Expr interface {
 		Node
 		exprNode()
@@ -71,11 +75,6 @@ type (
 		Body     *BlockStmt
 	}
 
-	Ident struct {
-		Name string
-		Pos  token.Position
-	}
-
 	BranchStmt struct {
 		Kind  token.Tok
 		Pos   token.Position
@@ -110,10 +109,6 @@ func (s *ProcStmt) stmtNode()             {}
 func (s *ProcStmt) Start() token.Position { return s.Proc }
 func (s *ProcStmt) End() token.Position   { return s.Body.End() }
 
-func (s *Ident) stmtNode()             {}
-func (s *Ident) Start() token.Position { return s.Pos }
-func (s *Ident) End() token.Position   { return token.Position(int(s.Pos) + len(s.Name)) }
-
 func (s *BranchStmt) stmtNode()             {}
 func (s *BranchStmt) Start() token.Position { return s.Pos }
 func (s *BranchStmt) End() token.Position {
@@ -136,6 +131,11 @@ type (
 		To   token.Position
 	}
 
+	Ident struct {
+		Name string
+		Pos  token.Position
+	}
+
 	ImportExpr struct {
 		ModuleName string
 		Pos        token.Position
@@ -154,11 +154,34 @@ type (
 		Literal string
 		Pos     token.Position
 	}
+
+	BinaryExpr struct {
+		Lhs   Expr
+		Rhs   Expr
+		Op    token.Tok
+		OpPos token.Position
+	}
+
+	UnaryExpr struct {
+		Op    token.Tok
+		OpPos token.Position
+		X     Expr
+	}
+
+	GroupedExpr struct {
+		Lparen token.Position
+		X      Expr
+		Rparen token.Position
+	}
 )
 
 func (e *BadExpr) exprNode()             {}
 func (e *BadExpr) Start() token.Position { return e.From }
 func (e *BadExpr) End() token.Position   { return e.To }
+
+func (s *Ident) exprNode()             {}
+func (s *Ident) Start() token.Position { return s.Pos }
+func (s *Ident) End() token.Position   { return token.Position(int(s.Pos) + len(s.Name)) }
 
 func (e *ImportExpr) exprNode()             {}
 func (e *ImportExpr) Start() token.Position { return e.Pos }
@@ -172,3 +195,15 @@ func (e *CallExpr) End() token.Position   { return e.RParen + 1 }
 func (e *StringLit) exprNode()             {}
 func (e *StringLit) Start() token.Position { return e.Pos }
 func (e *StringLit) End() token.Position   { return token.Position(int(e.Pos) + len(e.Literal)) }
+
+func (e *BinaryExpr) exprNode()             {}
+func (e *BinaryExpr) Start() token.Position { return e.Lhs.Start() }
+func (e *BinaryExpr) End() token.Position   { return e.Rhs.End() }
+
+func (e *UnaryExpr) exprNode()             {}
+func (e *UnaryExpr) Start() token.Position { return e.OpPos }
+func (e *UnaryExpr) End() token.Position   { return e.X.End() }
+
+func (e *GroupedExpr) exprNode()             {}
+func (e *GroupedExpr) Start() token.Position { return e.Lparen }
+func (e *GroupedExpr) End() token.Position   { return e.Rparen }

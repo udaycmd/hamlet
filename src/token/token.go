@@ -184,6 +184,7 @@ var tokens = [...]string{
 	REAL:          "[real]",
 	CHAR:          "[char]",
 	STRING:        "[string]",
+	EOF:           "[EOF]",
 }
 
 func (t Tok) String() string {
