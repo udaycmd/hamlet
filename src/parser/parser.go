@@ -17,8 +17,6 @@ import (
 )
 
 type (
-	StmtStarters map[token.Tok]bool
-
 	bailout struct{}
 
 	ParseError struct {
@@ -26,8 +24,21 @@ type (
 		msg      string
 	}
 
-	// Slice of [ParseError]
+	// Slice of *[ParseError]
 	ParseErrors []*ParseError
+)
+
+var (
+	stmtStarters = map[token.Tok]bool{
+		token.PROC:     true,
+		token.DECL:     true,
+		token.FOR:      true,
+		token.IF:       true,
+		token.RETURN:   true,
+		token.BREAK:    true,
+		token.CONTINUE: true,
+		token.EXPORT:   true,
+	}
 )
 
 func (e *ParseError) Error() string {
@@ -94,13 +105,17 @@ func (pe ParseErrors) err() error {
 //
 // [parser]: https://github.com/golang/go/blob/master/src/go/parser/parser.go
 type Parser struct {
-	file           *token.SourceHandle // file feeded to the parser
-	errors         ParseErrors         // all parsing errors
-	lexer          *lexer.Lexer        // lexer
-	pos            token.Position      // current position in the [token.SourceManager]
-	kind           token.Tok           // current token
-	tokenLit       string              // current token's literal value
-	maxReportError int                 // maximum number of errors to report before parsing termination
+	file     *token.SourceHandle // file feeded to the parser
+	lexer    *lexer.Lexer        // lexer
+	pos      token.Position      // current position in the [token.SourceManager]
+	kind     token.Tok           // current token
+	tokenLit string              // current token's literal value
+
+	// errors
+	errors         ParseErrors    // all parsing errors
+	maxReportError int            // maximum number of errors to report before parsing termination
+	syncPos        token.Position // last sync position
+	syncCount      int            // no of synchronize() calls without progress
 
 	// tracing
 	tracing     bool      // do tracing?
@@ -144,6 +159,22 @@ func untrace(p *Parser) {
 
 func (p *Parser) next() {
 	p.kind, p.tokenLit, p.pos = p.lexer.Lex()
+}
+
+func (p *Parser) synchronize(to map[token.Tok]bool) {
+	for ; p.kind != token.EOF; p.next() {
+		if to[p.kind] {
+			if p.pos == p.syncPos && p.syncCount < 10 {
+				p.syncCount++
+				return
+			}
+			if p.pos > p.syncPos {
+				p.syncPos = p.pos
+				p.syncCount = 0
+				return
+			}
+		}
+	}
 }
 
 func (p *Parser) error(pos token.Position, msg string) {
@@ -190,10 +221,28 @@ func (p *Parser) expectSemicolon() {
 	case token.SEMICOLON:
 		p.next()
 	case token.RIGHT_BRACE, token.RIGHT_PAREN:
+		// semicolon is optional before a '}' or ')'
 	default:
 		p.errorExpected(p.pos, "';'")
-		// p.advance(stmtStart)
+		p.synchronize(stmtStarters)
 	}
+}
+
+func (p *Parser) expectComma(gotAfter token.Tok, wantAfter string) bool {
+	if p.kind == token.COMMA {
+		p.next()
+
+		if p.kind == gotAfter {
+			p.errorExpected(p.pos, wantAfter)
+			return false
+		}
+		return true
+	}
+
+	if p.kind == token.SEMICOLON && p.tokenLit == "\n" {
+		p.next()
+	}
+	return false
 }
 
 func (p *Parser) parseSimpleStmt() Stmt {
@@ -316,8 +365,8 @@ func (p *Parser) parseIdentList() *IdentList {
 			params = append(params, p.parseIdent())
 		}
 	}
-	rparen := p.expect(token.RIGHT_PAREN)
 
+	rparen := p.expect(token.RIGHT_PAREN)
 	return &IdentList{
 		LParen:  lparen,
 		RParen:  rparen,
@@ -380,7 +429,8 @@ func (p *Parser) parseCallExpr(x Expr) *CallExpr {
 			p.next()
 		}
 
-		if !p.expectComma() {
+		// catches a trailing comma with no following element
+		if !p.expectComma(token.RIGHT_PAREN, "<call_argument>") {
 			break
 		}
 	}
@@ -406,8 +456,7 @@ func (p *Parser) parseImportExpr() Expr {
 
 	if p.kind != token.STRING {
 		p.errorExpected(p.pos, "<module_name>")
-		// TODO: Advanve to next stmt starter
-		// p.advance(stmtStart)
+		p.synchronize(stmtStarters)
 		return &BadExpr{From: pos, To: p.pos}
 	}
 
