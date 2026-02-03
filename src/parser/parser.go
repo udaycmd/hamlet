@@ -683,18 +683,9 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 
 		p.next()
 		return x
-	case token.TRUE:
+	case token.TRUE, token.FALSE:
 		x := &BoolLit{
-			Val:     true,
-			Literal: p.tokenLit,
-			Pos:     p.pos,
-		}
-
-		p.next()
-		return x
-	case token.FALSE:
-		x := &BoolLit{
-			Val:     false,
+			Val:     (p.kind == token.TRUE),
 			Literal: p.tokenLit,
 			Pos:     p.pos,
 		}
