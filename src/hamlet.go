@@ -10,7 +10,6 @@ import (
 	"io"
 	"os"
 
-	"github.com/udaycmd/hamlet/src/lexer"
 	"github.com/udaycmd/hamlet/src/parser"
 	"github.com/udaycmd/hamlet/src/token"
 )
@@ -70,10 +69,10 @@ func hamlet_main() error {
 		return err
 	}
 
-	// TODO: Change this
+	// TODO: Remove this
 	test := token.NewSourceManager()
 	testFile := test.AddFile(input, -1, len(data))
-	p := parser.NewParser(testFile, data, 10, lexer.NoAsi, os.Stdout)
+	p := parser.NewParser(testFile, data, 10, 0, os.Stdout)
 	_, err = p.Parse()
 	fmt.Printf("\n\n%v\n\n", err)
 

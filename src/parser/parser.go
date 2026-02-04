@@ -43,10 +43,10 @@ var (
 
 func (e *ParseError) Error() string {
 	if e.position.FileName != "" || e.position.IsValid() {
-		return fmt.Sprintf("Parsing Error: %s\tat %s", e.msg, e.position)
+		return fmt.Sprintf("%s at %s", e.msg, e.position)
 	}
 
-	return fmt.Sprintf("Parsing Error: %s", e.msg)
+	return fmt.Sprintf("%s", e.msg)
 }
 
 func (pe *ParseErrors) Extend(pos token.SrcPos, msg string) {
@@ -257,6 +257,10 @@ func (p *Parser) parseStmt() Stmt {
 	}
 
 	switch p.kind {
+	case token.IF:
+		return p.parseIfStmt()
+	case token.FOR:
+		return p.parseForStmt()
 	case token.EXPORT:
 		return p.parseExportStmt()
 	case token.PROC:
@@ -286,6 +290,207 @@ func (p *Parser) parseStmtList() []Stmt {
 	}
 
 	return stmts
+}
+
+func (p *Parser) parseIfCond() Expr {
+	if p.kind == token.LEFT_BRACE {
+		p.error(p.pos, "missing a <conditional_expression> in <if_statement>")
+		return &BadExpr{From: p.pos, To: p.pos}
+	}
+
+	var condStmt Stmt
+	var cond Expr
+	condStmt = p.parseExprStmt(false)
+
+	if x, ok := condStmt.(*ExprStmt); ok {
+		cond = x.e
+	} else {
+		p.errorExpected(condStmt.Start(), "<bool_expression>")
+		return &BadExpr{From: condStmt.Start(), To: condStmt.End()}
+	}
+
+	return cond
+}
+
+func (p *Parser) parseIfStmt() Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "IfStmt"))
+	}
+
+	ifPos := p.expect(token.IF)
+	cond := p.parseIfCond()
+	body := p.parseBlockStmt()
+
+	var elseStmt Stmt
+	if p.kind == token.ELSE {
+		p.next()
+
+		switch p.kind {
+		case token.IF:
+			elseStmt = p.parseIfStmt()
+		case token.LEFT_BRACE:
+			elseStmt = p.parseBlockStmt()
+			p.expectSemicolon()
+		default:
+			p.errorExpected(p.pos, "<if_expression> or <block_statement>")
+			elseStmt = &BadStmt{From: p.pos, To: p.pos}
+		}
+
+	} else {
+		p.expectSemicolon()
+	}
+
+	return &IfStmt{
+		IfPos: ifPos,
+		Cond:  cond,
+		Body:  body,
+		Else:  elseStmt,
+	}
+}
+
+func (p *Parser) parseForStmt() Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "ForStmt"))
+	}
+
+	// variants of for loop in hamlet:
+	//
+	// 1. infinite loop
+	// 		for {}
+	//
+	// 2. value ranged loops
+	// 		for v in <iterable> {}
+	// 		for x in s..e {}
+	//
+	// 3. index, value based loops
+	// 		for i, v in <iterable> {}
+
+	pos := p.expect(token.FOR)
+
+	if p.kind == token.LEFT_BRACE {
+		body := p.parseBlockStmt()
+		p.expectSemicolon()
+
+		return &ForStmt{
+			ForPos: pos,
+			Cond:   nil,
+			Body:   body,
+		}
+	}
+
+	x := p.parseExprStmt(true)
+	if forInStmt, ok := x.(*ForInStmt); ok {
+		forInStmt.ForPos = pos
+		forInStmt.Body = p.parseBlockStmt()
+		p.expectSemicolon()
+		return forInStmt
+	}
+
+	if condStmt, ok := x.(*ExprStmt); ok {
+		body := p.parseBlockStmt()
+		p.expectSemicolon()
+		return &ForStmt{
+			ForPos: pos,
+			Cond:   condStmt.e,
+			Body:   body,
+		}
+	}
+
+	return &BadStmt{From: x.Start(), To: x.End()}
+}
+
+func (p *Parser) parseExprList() []Expr {
+	if p.tracing {
+		defer untrace(trace(p, "ExprList"))
+	}
+
+	var xs []Expr
+	xs = append(xs, p.parseExpr())
+	for p.kind == token.COMMA {
+		p.next()
+		xs = append(xs, p.parseExpr())
+	}
+
+	return xs
+}
+
+func (p *Parser) parseExprStmt(isForIn bool) Stmt {
+	if p.tracing {
+		defer untrace(trace(p, "ExprStmt"))
+	}
+
+	x := p.parseExprList()
+
+	switch p.kind {
+	case token.ASSIGN:
+		pos := p.pos
+		p.next()
+		y := p.parseExprList()
+		return &AssignStmt{
+			Lhs:    x,
+			EqType: token.ASSIGN,
+			Eq:     pos,
+			Rhs:    y,
+		}
+
+	case token.IN:
+		if isForIn {
+			p.next()
+			y := p.parseExpr()
+
+			var index, val *Ident
+			var ok bool
+			switch len(x) {
+			case 1:
+				val, ok = x[0].(*Ident)
+
+				if !ok {
+					p.errorExpected(x[0].Start(), "<identifier>")
+					val = &Ident{Name: "_", Pos: x[0].Start()}
+				}
+			case 2:
+				index, ok = x[0].(*Ident)
+				if !ok {
+					p.errorExpected(x[0].Start(), "<identifier>")
+					index = &Ident{Name: "_", Pos: x[0].Start()}
+				}
+
+				val, ok = x[0].(*Ident)
+				if !ok {
+					p.errorExpected(x[0].Start(), "<identifier>")
+					val = &Ident{Name: "_", Pos: x[0].Start()}
+				}
+			}
+
+			return &ForInStmt{
+				Index:    index,
+				Val:      val,
+				Iterable: y,
+			}
+		}
+	}
+
+	if len(x) > 1 {
+		p.errorExpected(x[0].Start(), "one expression")
+	}
+
+	switch p.kind {
+	case token.PLUS_EQ, token.MINUS_EQ, token.STAR_EQ, token.SLASH_EQ, token.PERCENT_EQ,
+		token.AND_EQ, token.OR_EQ, token.NOT_EQ_BIT, token.LSHIFT_EQ, token.RSHIFT_EQ:
+		opPos, opKind := p.pos, p.kind
+		p.next()
+		y := p.parseExpr()
+		return &AssignStmt{
+			Lhs:    []Expr{x[0]},
+			EqType: opKind,
+			Eq:     opPos,
+			Rhs:    []Expr{y},
+		}
+	}
+
+	return &ExprStmt{
+		e: x[0],
+	}
 }
 
 func (p *Parser) parseIdent() *Ident {
@@ -478,6 +683,10 @@ func (p *Parser) parseExpr() Expr {
 		return p.parseTernaryExpr(x)
 	}
 
+	if p.kind == token.UNTIL {
+		p.parseRangeExpr(x)
+	}
+
 	return x
 }
 
@@ -532,8 +741,8 @@ func (p *Parser) parseLogicalExpr() Expr {
 	}
 
 	lhs := p.parseTermExpr()
-	for p.kind == token.AND || p.kind == token.OR ||
-		p.kind == token.CARET || p.kind == token.AMPERSAND || p.kind == token.PIPE {
+	for p.kind == token.AND || p.kind == token.OR || p.kind == token.RIGHT_SHIFT ||
+		p.kind == token.LEFT_SHIFT || p.kind == token.CARET || p.kind == token.AMPERSAND || p.kind == token.PIPE {
 		opKind, opPos := p.kind, p.pos
 		p.next()
 
@@ -707,6 +916,10 @@ func (p *Parser) parseReceiverExpr(x Expr) Expr {
 }
 
 func (p *Parser) parseTernaryExpr(cond Expr) *TernaryExpr {
+	if p.tracing {
+		defer untrace(trace(p, "TernaryExpr"))
+	}
+
 	question := p.expect(token.QUESTION)
 	e1 := p.parseExpr()
 	colon := p.expect(token.COLON)
@@ -718,6 +931,22 @@ func (p *Parser) parseTernaryExpr(cond Expr) *TernaryExpr {
 		True:  e1,
 		Colon: colon,
 		False: e2,
+	}
+}
+
+func (p *Parser) parseRangeExpr(x Expr) *RangeExpr {
+	if p.tracing {
+		defer untrace(trace(p, "RangeExpr"))
+	}
+
+	ranger := p.kind
+	p.next()
+	y := p.parseExpr()
+
+	return &RangeExpr{
+		Lhs:    x,
+		Ranger: ranger,
+		Rhs:    y,
 	}
 }
 

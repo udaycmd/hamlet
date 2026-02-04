@@ -57,6 +57,10 @@ type (
 		To   token.Position
 	}
 
+	ExprStmt struct {
+		e Expr
+	}
+
 	EmptyStmt struct {
 		Semicolon  token.Position
 		IsImplicit bool
@@ -104,11 +108,43 @@ type (
 		Pos token.Position
 		e   Expr
 	}
+
+	IfStmt struct {
+		IfPos token.Position
+		Cond  Expr
+		Body  *BlockStmt
+		Else  Stmt
+	}
+
+	ForStmt struct {
+		ForPos token.Position
+		Cond   Expr
+		Body   *BlockStmt
+	}
+
+	ForInStmt struct {
+		ForPos   token.Position
+		Index    *Ident
+		Val      *Ident
+		Iterable Expr
+		Body     *BlockStmt
+	}
+
+	AssignStmt struct {
+		Lhs    []Expr
+		EqType token.Tok
+		Eq     token.Position
+		Rhs    []Expr
+	}
 )
 
 func (s *BadStmt) stmtNode()             {}
 func (s *BadStmt) Start() token.Position { return s.From }
 func (s *BadStmt) End() token.Position   { return s.To }
+
+func (s *ExprStmt) stmtNode()             {}
+func (s *ExprStmt) Start() token.Position { return s.Start() }
+func (s *ExprStmt) End() token.Position   { return s.End() }
 
 func (s *EmptyStmt) stmtNode()             {}
 func (s *EmptyStmt) Start() token.Position { return s.Semicolon }
@@ -153,6 +189,28 @@ func (s *ReturnStmt) End() token.Position   { return s.e.End() }
 func (s *ExportStmt) stmtNode()             {}
 func (s *ExportStmt) Start() token.Position { return s.Pos }
 func (s *ExportStmt) End() token.Position   { return s.e.End() }
+
+func (s *IfStmt) stmtNode()             {}
+func (s *IfStmt) Start() token.Position { return s.IfPos }
+func (s *IfStmt) End() token.Position {
+	if s.Else != nil {
+		return s.Else.End()
+	}
+
+	return s.Body.End()
+}
+
+func (s *ForStmt) stmtNode()             {}
+func (s *ForStmt) Start() token.Position { return s.ForPos }
+func (s *ForStmt) End() token.Position   { return s.Body.End() }
+
+func (s *ForInStmt) stmtNode()             {}
+func (s *ForInStmt) Start() token.Position { return s.ForPos }
+func (s *ForInStmt) End() token.Position   { return s.Body.End() }
+
+func (s *AssignStmt) stmtNode()             {}
+func (s *AssignStmt) Start() token.Position { return s.Lhs[0].Start() }
+func (s *AssignStmt) End() token.Position   { return s.Rhs[len(s.Rhs)-1].End() }
 
 // --- Expressions ---
 
@@ -285,6 +343,12 @@ type (
 		Colon token.Position
 		False Expr
 	}
+
+	RangeExpr struct {
+		Lhs    Expr
+		Ranger token.Tok
+		Rhs    Expr
+	}
 )
 
 func (e *BadExpr) exprNode()             {}
@@ -371,3 +435,7 @@ func (e *ReceiverExpr) End() token.Position   { return e.Id.Pos + token.Position
 func (e *TernaryExpr) exprNode()             {}
 func (e *TernaryExpr) Start() token.Position { return e.X.Start() }
 func (e *TernaryExpr) End() token.Position   { return e.False.End() }
+
+func (e *RangeExpr) exprNode()             {}
+func (e *RangeExpr) Start() token.Position { return e.Lhs.Start() }
+func (e *RangeExpr) End() token.Position   { return e.Rhs.End() }

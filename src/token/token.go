@@ -29,6 +29,7 @@ const (
 	CONCEPT
 	SWITCH
 	TYPE_INFO
+	UNTIL
 	DECL
 	CONST
 	TRUE
@@ -88,7 +89,6 @@ const (
 	COLON
 	DOUBLE_COLON
 	DOT
-	DOT_DOT
 	DOT_DOT_DOT
 
 	_PuncEnd
@@ -119,6 +119,7 @@ var keywords = map[string]Tok{
 	"concept":   CONCEPT,
 	"switch":    SWITCH,
 	"type_info": TYPE_INFO,
+	"until":     UNTIL,
 	"decl":      DECL,
 	"const":     CONST,
 	"true":      TRUE,
@@ -179,7 +180,6 @@ var tokens = [...]string{
 	COLON:         ":",
 	DOUBLE_COLON:  "::",
 	DOT:           ".",
-	DOT_DOT:       "..",
 	DOT_DOT_DOT:   "...",
 	IDENTIFIER:    "identifier",
 	INTEGER:       "integer",

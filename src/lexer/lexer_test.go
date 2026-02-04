@@ -131,7 +131,6 @@ func TestTokens(t *testing.T) {
 		{token.LESS_EQ, "<="},
 		{token.GREATER_EQ, ">="},
 		{token.DOT, "."},
-		{token.DOT_DOT, ".."},
 		{token.DOT_DOT_DOT, "..."},
 		{token.LEFT_PAREN, "("},
 		{token.LEFT_BRACKET, "["},
@@ -162,7 +161,7 @@ func TestTokens(t *testing.T) {
 	for i, tc := range testcases {
 		// add extra lines before each test case
 		emptyLines := rand.Intn(4)
-		for j := 0; j < emptyLines; j++ {
+		for range emptyLines {
 			lines = append(lines, strings.Repeat(" ", rand.Intn(10)))
 		}
 

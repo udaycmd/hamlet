@@ -36,6 +36,7 @@ var (
 	ErrCharLiteralTooWide        = "character literal too wide"
 	ErrNoDigitAfterExponent      = "expected digit(s) after exponent"
 	ErrNoDigitAfterBaseSpecifier = "expected digit(s) after base specifier"
+	ErrInvalidEllipsisMark       = "expected a '.' after '..'"
 )
 
 type (
@@ -559,11 +560,12 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 			tok = token.DOT
 			switch l.cc {
 			case '.':
-				tok = token.DOT_DOT
 				l.next()
 				if l.cc == '.' {
 					tok = token.DOT_DOT_DOT
 					l.next()
+				} else {
+					l.error(l.file.Offset(pos), ErrInvalidEllipsisMark)
 				}
 			}
 		default:
