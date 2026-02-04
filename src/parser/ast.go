@@ -75,6 +75,13 @@ type (
 		Body     *BlockStmt
 	}
 
+	DeclStmt struct {
+		Decl  token.Position
+		Ident *Ident
+		Equal token.Position
+		Val   Expr
+	}
+
 	BranchStmt struct {
 		Kind  token.Tok
 		Pos   token.Position
@@ -113,6 +120,10 @@ func (s *BlockStmt) End() token.Position   { return s.RBrace + 1 }
 func (s *ProcStmt) stmtNode()             {}
 func (s *ProcStmt) Start() token.Position { return s.Proc }
 func (s *ProcStmt) End() token.Position   { return s.Body.End() }
+
+func (s *DeclStmt) stmtNode()             {}
+func (s *DeclStmt) Start() token.Position { return s.Decl }
+func (s *DeclStmt) End() token.Position   { return s.Val.End() }
 
 func (s *BranchStmt) stmtNode()             {}
 func (s *BranchStmt) Start() token.Position { return s.Pos }
@@ -162,6 +173,18 @@ type (
 		Pos token.Position
 	}
 
+	IntLit struct {
+		Val     int64
+		Literal string
+		Pos     token.Position
+	}
+
+	FloatLit struct {
+		Val     float64
+		Literal string
+		Pos     token.Position
+	}
+
 	CharLit struct {
 		Val     rune
 		Literal string
@@ -184,6 +207,25 @@ type (
 		Proc   token.Position
 		Params *IdentList
 		Body   *BlockStmt
+	}
+
+	KvLit struct {
+		KeyPos token.Position
+		Key    string
+		Colon  token.Position
+		Value  Expr
+	}
+
+	MapLit struct {
+		LBrace token.Position
+		Kvs    []*KvLit
+		RBrace token.Position
+	}
+
+	ArrayLit struct {
+		LBrack token.Position
+		Items  []Expr
+		RBrack token.Position
 	}
 
 	BinaryExpr struct {
@@ -224,6 +266,14 @@ type (
 		X  Expr
 		Id *Ident
 	}
+
+	TernaryExpr struct {
+		X     Expr
+		Ques  token.Position
+		True  Expr
+		Colon token.Position
+		False Expr
+	}
 )
 
 func (e *BadExpr) exprNode()             {}
@@ -247,6 +297,14 @@ func (e *EmptyLit) exprNode()             {}
 func (e *EmptyLit) Start() token.Position { return e.Pos }
 func (e *EmptyLit) End() token.Position   { return e.Pos + token.Position(5) }
 
+func (e *IntLit) exprNode()             {}
+func (e *IntLit) Start() token.Position { return e.Pos }
+func (e *IntLit) End() token.Position   { return e.Pos + token.Position(len(e.Literal)) }
+
+func (e *FloatLit) exprNode()             {}
+func (e *FloatLit) Start() token.Position { return e.Pos }
+func (e *FloatLit) End() token.Position   { return e.Pos + token.Position(len(e.Literal)) }
+
 func (e *CharLit) exprNode()             {}
 func (e *CharLit) Start() token.Position { return e.Pos }
 func (e *CharLit) End() token.Position   { return e.Pos + token.Position(len(e.Literal)) }
@@ -262,6 +320,18 @@ func (e *BoolLit) End() token.Position   { return e.Pos + token.Position(len(e.L
 func (e *ProcLit) exprNode()             {}
 func (e *ProcLit) Start() token.Position { return e.Proc }
 func (e *ProcLit) End() token.Position   { return e.Proc + e.Body.End() }
+
+func (e *KvLit) exprNode()             {}
+func (e *KvLit) Start() token.Position { return e.KeyPos }
+func (e *KvLit) End() token.Position   { return e.Value.End() }
+
+func (e *MapLit) exprNode()             {}
+func (e *MapLit) Start() token.Position { return e.LBrace }
+func (e *MapLit) End() token.Position   { return e.RBrace + 1 }
+
+func (e *ArrayLit) exprNode()             {}
+func (e *ArrayLit) Start() token.Position { return e.LBrack }
+func (e *ArrayLit) End() token.Position   { return e.RBrack + 1 }
 
 func (e *BinaryExpr) exprNode()             {}
 func (e *BinaryExpr) Start() token.Position { return e.Lhs.Start() }
@@ -286,3 +356,7 @@ func (e *SliceExpr) End() token.Position   { return e.Rbrac }
 func (e *ReceiverExpr) exprNode()             {}
 func (e *ReceiverExpr) Start() token.Position { return e.X.Start() }
 func (e *ReceiverExpr) End() token.Position   { return e.Id.Pos + token.Position(len(e.Id.Name)) }
+
+func (e *TernaryExpr) exprNode()             {}
+func (e *TernaryExpr) Start() token.Position { return e.X.Start() }
+func (e *TernaryExpr) End() token.Position   { return e.False.End() }

@@ -7,6 +7,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/udaycmd/hamlet/src/lexer"
@@ -15,28 +16,38 @@ import (
 )
 
 var (
+	flags         *flag.FlagSet
 	showHelp      bool
 	showVersion   bool
 	maxShowErrors int
 )
 
 func printVersion() {
-	fmt.Println("Hamlet Interpreter", HamletVersion)
+	fmt.Println("Hamlet", HamletVersion)
 }
 
 func help() {
+	flags.SetOutput(os.Stderr)
+
 	printVersion()
 	fmt.Println("Copyright (C) 2026 Uday Tiwari")
 	fmt.Println("Usage: hamlet [option] ... [file] [filearg] ...")
 	fmt.Println("Options:")
-	flag.PrintDefaults()
+	flags.PrintDefaults()
 }
 
 func hamlet_main() error {
-	flag.Usage = help
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		if err == flag.ErrHelp {
+			help()
+			return nil
+		}
+
+		return err
+	}
 
 	if showHelp {
-		flag.Usage()
+		help()
 		return nil
 	}
 
@@ -45,7 +56,7 @@ func hamlet_main() error {
 		return nil
 	}
 
-	input := flag.Arg(0)
+	input := flags.Arg(0)
 	if input == "" {
 		return fmt.Errorf("no input provided")
 	}
@@ -63,7 +74,8 @@ func hamlet_main() error {
 	test := token.NewSourceManager()
 	testFile := test.AddFile(input, -1, len(data))
 	p := parser.NewParser(testFile, data, 10, lexer.NoAsi, os.Stdout)
-	p.Parse()
+	_, err = p.Parse()
+	fmt.Printf("\n\n%v\n\n", err)
 
 	return nil
 }
@@ -77,8 +89,10 @@ func main() {
 
 // all flags
 func init() {
-	flag.BoolVar(&showVersion, "version", false, "print the Hamlet version number and exit")
-	flag.BoolVar(&showHelp, "help", false, "print help")
-	flag.IntVar(&maxShowErrors, "max-errors", 5, "maximum numbers of errors to show")
-	flag.Parse()
+	flags = &flag.FlagSet{}
+	flags.SetOutput(io.Discard)
+
+	flags.BoolVar(&showVersion, "version", false, "print the Hamlet version number and exit")
+	flags.BoolVar(&showHelp, "help", false, "print help")
+	flags.IntVar(&maxShowErrors, "max-errors", 5, "maximum numbers of errors to show")
 }

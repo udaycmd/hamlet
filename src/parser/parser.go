@@ -43,14 +43,14 @@ var (
 
 func (e *ParseError) Error() string {
 	if e.position.FileName != "" || e.position.IsValid() {
-		return fmt.Sprintf("Parsing Error: %s\n\tat %s", e.msg, e.position)
+		return fmt.Sprintf("Parsing Error: %s\tat %s", e.msg, e.position)
 	}
 
 	return fmt.Sprintf("Parsing Error: %s", e.msg)
 }
 
-func (pe ParseErrors) Extend(pos token.SrcPos, msg string) {
-	pe = append(pe, &ParseError{position: pos, msg: msg})
+func (pe *ParseErrors) Extend(pos token.SrcPos, msg string) {
+	*pe = append(*pe, &ParseError{position: pos, msg: msg})
 }
 
 func (pe ParseErrors) Len() int {
@@ -85,12 +85,12 @@ func (pe ParseErrors) Error() string {
 	n := len(pe)
 	switch n {
 	case 0:
-		return ""
+		return "empty"
 	case 1:
-		return "TODO: error should be here"
+		return pe[0].Error()
+	default:
+		return fmt.Sprintf("%s and %d more error(s)", pe[0].Error(), n-1)
 	}
-
-	return fmt.Sprintf("%s and %d more error(s)", pe[0].Error(), n-1)
 }
 
 func (pe ParseErrors) err() error {
@@ -211,7 +211,7 @@ func (p *Parser) expect(kind token.Tok) token.Position {
 	pos := p.pos
 
 	if p.kind != kind {
-		p.errorExpected(pos, "<"+kind.String()+">")
+		p.errorExpected(pos, "'"+kind.String()+"'")
 	}
 
 	p.next()
@@ -257,19 +257,26 @@ func (p *Parser) parseStmt() Stmt {
 	}
 
 	switch p.kind {
+	case token.EXPORT:
+		return p.parseExportStmt()
 	case token.PROC:
 		return p.parseProcStmt()
+	case token.DECL:
+		return p.parseDeclStmt()
 	case token.RETURN:
 		return p.parseReturnStmt()
-	case token.SEMICOLON:
-		s := &EmptyStmt{Semicolon: p.pos, IsImplicit: p.tokenLit == "\n"}
+	case token.SEMICOLON, token.RIGHT_BRACE:
+		s := &EmptyStmt{Semicolon: p.pos, IsImplicit: (p.kind == token.RIGHT_BRACE || p.tokenLit == "\n")}
 		p.next()
 		return s
 	case token.BREAK, token.CONTINUE:
 		return p.parseBranchStmt(p.kind)
+	default:
+		pos := p.pos
+		p.errorExpected(pos, "<statement>")
+		p.synchronize(stmtStarters)
+		return &BadStmt{From: pos, To: pos}
 	}
-
-	return nil
 }
 
 func (p *Parser) parseStmtList() []Stmt {
@@ -302,7 +309,7 @@ func (p *Parser) parseIdent() *Ident {
 	}
 }
 
-func (p *Parser) parseReturnStmt() Stmt {
+func (p *Parser) parseReturnStmt() *ReturnStmt {
 	if p.tracing {
 		defer untrace(trace(p, "ReturnStmt"))
 	}
@@ -322,7 +329,25 @@ func (p *Parser) parseReturnStmt() Stmt {
 	}
 }
 
-func (p *Parser) parseBranchStmt(tok token.Tok) Stmt {
+func (p *Parser) parseDeclStmt() *DeclStmt {
+	if p.tracing {
+		defer untrace(trace(p, "DeclStmt"))
+	}
+
+	decl := p.expect(token.DECL)
+	ident := p.parseIdent()
+	equals := p.expect(token.ASSIGN)
+	x := p.parseExpr()
+
+	return &DeclStmt{
+		Decl:  decl,
+		Ident: ident,
+		Equal: equals,
+		Val:   x,
+	}
+}
+
+func (p *Parser) parseBranchStmt(tok token.Tok) *BranchStmt {
 	if p.tracing {
 		defer untrace(trace(p, "BranchStmt"))
 	}
@@ -432,7 +457,13 @@ func (p *Parser) parseExpr() Expr {
 		defer untrace(trace(p, "Expr"))
 	}
 
-	return p.parseEqualityExpr()
+	x := p.parseEqualityExpr()
+
+	if p.kind == token.QUESTION {
+		return p.parseTernaryExpr(x)
+	}
+
+	return x
 }
 
 func (p *Parser) parseEqualityExpr() Expr {
@@ -660,6 +691,21 @@ func (p *Parser) parseReceiverExpr(x Expr) Expr {
 	}
 }
 
+func (p *Parser) parseTernaryExpr(cond Expr) *TernaryExpr {
+	question := p.expect(token.QUESTION)
+	e1 := p.parseExpr()
+	colon := p.expect(token.COLON)
+	e2 := p.parseExpr()
+
+	return &TernaryExpr{
+		X:     cond,
+		Ques:  question,
+		True:  e1,
+		Colon: colon,
+		False: e2,
+	}
+}
+
 func (p *Parser) parseLiteralOrSubExpr() Expr {
 	if p.tracing {
 		defer untrace(trace(p, "LiteralOrSubExpr"))
@@ -668,6 +714,40 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 	switch p.kind {
 	case token.EMPTY:
 		x := &EmptyLit{Pos: p.pos}
+
+		p.next()
+		return x
+	case token.INTEGER:
+		i, err := strconv.ParseInt(p.tokenLit, 0, 64)
+		if err != nil {
+			if err == strconv.ErrRange {
+				p.error(p.pos, "<integer_too_big>")
+			} else {
+				p.error(p.pos, "<invalid_integer>")
+			}
+		}
+		x := &IntLit{
+			Val:     i,
+			Literal: p.tokenLit,
+			Pos:     p.pos,
+		}
+
+		p.next()
+		return x
+	case token.REAL:
+		f, err := strconv.ParseFloat(p.tokenLit, 64)
+		if err != nil {
+			if err == strconv.ErrRange {
+				p.error(p.pos, "<number_too_big>")
+			} else {
+				p.error(p.pos, "<invalid_number>")
+			}
+		}
+		x := &FloatLit{
+			Val:     f,
+			Literal: p.tokenLit,
+			Pos:     p.pos,
+		}
 
 		p.next()
 		return x
@@ -709,6 +789,10 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 			X:      x,
 			Rparen: rparen,
 		}
+	case token.LEFT_BRACE:
+		return p.parseMapLiteral()
+	case token.LEFT_BRACKET:
+		return p.parseArrayLiteral()
 	default:
 		p.errorExpected(p.pos, "<expr>")
 	}
@@ -717,6 +801,86 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 	pos := p.pos
 	p.synchronize(stmtStarters)
 	return &BadExpr{From: pos, To: p.pos}
+}
+
+func (p *Parser) parseKvLit() *KvLit {
+	if p.tracing {
+		defer untrace(trace(p, "KvLit"))
+	}
+
+	pos := p.pos
+	key := ""
+
+	// valid map keys are just like ecmascript's object keys
+	switch p.kind {
+	case token.IDENTIFIER:
+		key = p.tokenLit
+	case token.STRING:
+		v, _ := strconv.Unquote(p.tokenLit)
+		key = v
+	default:
+		p.errorExpected(pos, "<valid_key>")
+	}
+
+	p.next()
+	colon := p.expect(token.COLON)
+	value := p.parseExpr()
+	return &KvLit{
+		KeyPos: pos,
+		Key:    key,
+		Colon:  colon,
+		Value:  value,
+	}
+}
+
+func (p *Parser) parseMapLiteral() *MapLit {
+	if p.tracing {
+		defer untrace(trace(p, "MapLit"))
+	}
+
+	lbrace := p.expect(token.LEFT_BRACE)
+
+	var kv []*KvLit
+	for p.kind != token.RIGHT_BRACE && p.kind != token.EOF {
+		kv = append(kv, p.parseKvLit())
+
+		// catches a trailing comma with no following KV pair
+		if !p.expectComma(token.RIGHT_BRACE, "<key_val_pair>") {
+			break
+		}
+	}
+
+	rbrace := p.expect(token.RIGHT_BRACE)
+	return &MapLit{
+		LBrace: lbrace,
+		Kvs:    kv,
+		RBrace: rbrace,
+	}
+}
+
+func (p *Parser) parseArrayLiteral() *ArrayLit {
+	if p.tracing {
+		defer untrace(trace(p, "ArrayLit"))
+	}
+
+	lbrack := p.expect(token.LEFT_BRACKET)
+
+	var items []Expr
+	for p.kind != token.RIGHT_BRACKET && p.kind != token.EOF {
+		items = append(items, p.parseExpr())
+
+		// catches a trailing comma with no following array element
+		if !p.expectComma(token.RIGHT_BRACKET, "<array_element>") {
+			break
+		}
+	}
+
+	rbrack := p.expect(token.RIGHT_BRACKET)
+	return &ArrayLit{
+		LBrack: lbrack,
+		Items:  items,
+		RBrack: rbrack,
+	}
 }
 
 func (p *Parser) parseCallExpr(x Expr) *CallExpr {
