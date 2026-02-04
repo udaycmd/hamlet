@@ -1,1 +1,2 @@
-decl x = proc (a, b, c) {}
+decl x = proc (a, b, c) {} # declaration: can be mutated
+const y = 10 # const: cannot be mutated

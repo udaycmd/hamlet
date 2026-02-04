@@ -151,6 +151,7 @@ func TestTokens(t *testing.T) {
 		{token.IF, "if"},
 		{token.RETURN, "return"},
 		{token.EXPORT, "export"},
+		{token.CONST, "const"},
 	}
 
 	var lines []string

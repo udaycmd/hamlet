@@ -261,8 +261,8 @@ func (p *Parser) parseStmt() Stmt {
 		return p.parseExportStmt()
 	case token.PROC:
 		return p.parseProcStmt()
-	case token.DECL:
-		return p.parseDeclStmt()
+	case token.DECL, token.CONST:
+		return p.parseDeclOrConstStmt(p.kind == token.CONST)
 	case token.RETURN:
 		return p.parseReturnStmt()
 	case token.SEMICOLON, token.RIGHT_BRACE:
@@ -329,18 +329,33 @@ func (p *Parser) parseReturnStmt() *ReturnStmt {
 	}
 }
 
-func (p *Parser) parseDeclStmt() *DeclStmt {
+func (p *Parser) parseDeclOrConstStmt(isConst bool) Stmt {
 	if p.tracing {
-		defer untrace(trace(p, "DeclStmt"))
+		defer untrace(trace(p, "DeclOrConstStmt"))
 	}
 
-	decl := p.expect(token.DECL)
+	specifier := token.Position(0)
+	if isConst {
+		specifier = p.expect(token.CONST)
+	} else {
+		specifier = p.expect(token.DECL)
+	}
+
 	ident := p.parseIdent()
 	equals := p.expect(token.ASSIGN)
 	x := p.parseExpr()
 
+	if isConst {
+		return &ConstStmt{
+			Const: specifier,
+			Ident: ident,
+			Equal: equals,
+			Val:   x,
+		}
+	}
+
 	return &DeclStmt{
-		Decl:  decl,
+		Decl:  specifier,
 		Ident: ident,
 		Equal: equals,
 		Val:   x,

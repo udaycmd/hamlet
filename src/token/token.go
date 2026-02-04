@@ -30,6 +30,7 @@ const (
 	SWITCH
 	TYPE_INFO
 	DECL
+	CONST
 	TRUE
 	FALSE
 	EMPTY
@@ -119,6 +120,7 @@ var keywords = map[string]Tok{
 	"switch":    SWITCH,
 	"type_info": TYPE_INFO,
 	"decl":      DECL,
+	"const":     CONST,
 	"true":      TRUE,
 	"false":     FALSE,
 	"empty":     EMPTY,

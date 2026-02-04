@@ -82,6 +82,13 @@ type (
 		Val   Expr
 	}
 
+	ConstStmt struct {
+		Const token.Position
+		Ident *Ident
+		Equal token.Position
+		Val   Expr
+	}
+
 	BranchStmt struct {
 		Kind  token.Tok
 		Pos   token.Position
@@ -124,6 +131,10 @@ func (s *ProcStmt) End() token.Position   { return s.Body.End() }
 func (s *DeclStmt) stmtNode()             {}
 func (s *DeclStmt) Start() token.Position { return s.Decl }
 func (s *DeclStmt) End() token.Position   { return s.Val.End() }
+
+func (s *ConstStmt) stmtNode()             {}
+func (s *ConstStmt) Start() token.Position { return s.Const }
+func (s *ConstStmt) End() token.Position   { return s.Val.End() }
 
 func (s *BranchStmt) stmtNode()             {}
 func (s *BranchStmt) Start() token.Position { return s.Pos }
