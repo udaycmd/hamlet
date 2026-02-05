@@ -4,6 +4,8 @@
 
 package token
 
+import "fmt"
+
 type Tok uint8
 
 const (
@@ -12,6 +14,9 @@ const (
 	COMMENT
 
 	// - Keywords -
+
+	_KwBegin
+
 	BREAK
 	CASE
 	CONTINUE
@@ -36,6 +41,8 @@ const (
 	FALSE
 	EMPTY
 
+	_KwEnd
+
 	_OpBegin
 
 	// - Operators -
@@ -46,8 +53,7 @@ const (
 	PERCENT
 	AMPERSAND
 	PIPE
-	TILDE
-	CARET
+	XOR
 	LEFT_SHIFT
 	RIGHT_SHIFT
 	PLUS_EQ
@@ -55,9 +61,9 @@ const (
 	STAR_EQ
 	SLASH_EQ
 	PERCENT_EQ
+	XOR_EQ
 	AND_EQ
 	OR_EQ
-	NOT_EQ_BIT
 	LSHIFT_EQ
 	RSHIFT_EQ
 	ASSIGN
@@ -101,32 +107,6 @@ const (
 	STRING
 )
 
-var keywords = map[string]Tok{
-	"break":     BREAK,
-	"case":      CASE,
-	"continue":  CONTINUE,
-	"default":   DEFAULT,
-	"else":      ELSE,
-	"enum":      ENUM,
-	"proc":      PROC,
-	"for":       FOR,
-	"import":    IMPORT,
-	"export":    EXPORT,
-	"if":        IF,
-	"in":        IN,
-	"map":       MAP,
-	"return":    RETURN,
-	"concept":   CONCEPT,
-	"switch":    SWITCH,
-	"type_info": TYPE_INFO,
-	"until":     UNTIL,
-	"decl":      DECL,
-	"const":     CONST,
-	"true":      TRUE,
-	"false":     FALSE,
-	"empty":     EMPTY,
-}
-
 func (t Tok) IsOperator() bool {
 	return t < _OpEnd && t > _OpBegin
 }
@@ -135,7 +115,34 @@ func (t Tok) IsPunctuator() bool {
 	return t < _PuncEnd && t > _PuncBegin
 }
 
+func (t Tok) IsKeyword() bool {
+	return t < _KwEnd && t > _KwBegin
+}
+
 var tokens = [...]string{
+	BREAK:         "break",
+	CASE:          "case",
+	CONTINUE:      "continue",
+	DEFAULT:       "default",
+	ELSE:          "else",
+	ENUM:          "enum",
+	PROC:          "proc",
+	FOR:           "for",
+	IMPORT:        "import",
+	EXPORT:        "export",
+	IF:            "if",
+	IN:            "in",
+	MAP:           "map",
+	RETURN:        "return",
+	CONCEPT:       "concept",
+	SWITCH:        "switch",
+	TYPE_INFO:     "type_info",
+	UNTIL:         "until",
+	DECL:          "decl",
+	CONST:         "const",
+	TRUE:          "true",
+	FALSE:         "false",
+	EMPTY:         "empty",
 	ARROW:         "->",
 	PLUS:          "+",
 	MINUS:         "-",
@@ -144,18 +151,17 @@ var tokens = [...]string{
 	PERCENT:       "%",
 	AMPERSAND:     "&",
 	PIPE:          "|",
-	TILDE:         "~",
-	CARET:         "^",
+	XOR:           "^",
 	LEFT_SHIFT:    "<<",
 	RIGHT_SHIFT:   ">>",
 	PLUS_EQ:       "+=",
 	MINUS_EQ:      "-=",
 	STAR_EQ:       "*=",
+	XOR_EQ:        "^=",
 	SLASH_EQ:      "/=",
 	PERCENT_EQ:    "%=",
 	AND_EQ:        "&=",
 	OR_EQ:         "|=",
-	NOT_EQ_BIT:    "~=",
 	LSHIFT_EQ:     "<<=",
 	RSHIFT_EQ:     ">>=",
 	EQUALS:        "==",
@@ -189,18 +195,28 @@ var tokens = [...]string{
 	EOF:           "eof",
 }
 
+var keywords map[string]Tok
+
 func (t Tok) String() string {
 	if int(t) >= len(tokens) || tokens[t] == "" {
-		panic("unknown token encountered")
+		x := fmt.Sprintf("%d", t)
+		panic("unknown token encountered" + x)
 	}
 
 	return tokens[t]
 }
 
-func IsKeyword(name string) Tok {
+func IsIdent(name string) Tok {
 	if kw, ok := keywords[name]; ok {
 		return kw
 	}
 
 	return IDENTIFIER
+}
+
+func init() {
+	keywords = make(map[string]Tok)
+	for i := _KwBegin + 1; i < _KwEnd; i++ {
+		keywords[tokens[i]] = i
+	}
 }

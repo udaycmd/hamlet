@@ -376,7 +376,7 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 	switch c := l.cc; {
 	case isLetter(c):
 		lit = l.lexIdent()
-		tok = token.IsKeyword(lit)
+		tok = token.IsIdent(lit)
 		switch tok {
 		case token.BREAK, token.CONTINUE, token.RETURN, token.IDENTIFIER,
 			token.TRUE, token.FALSE, token.EMPTY:
@@ -411,7 +411,7 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 			// check if the comment is just after a 'asi' trigger
 			if l.asi {
 				l.cc = '#'
-				l.offset = l.file.Base // TODO: change this
+				l.offset = l.file.Offset(pos)
 				l.rdOffset = l.offset + 1
 				l.asi = false
 				return token.SEMICOLON, "\n", pos
@@ -426,8 +426,6 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 
 			tok = token.COMMENT
 			lit = comment
-		case '^':
-			tok = token.CARET
 		case '?':
 			tok = token.QUESTION
 		case '(':
@@ -492,10 +490,10 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 				tok = token.BANG_EQ
 				l.next()
 			}
-		case '~':
-			tok = token.TILDE
+		case '^':
+			tok = token.XOR
 			if l.cc == '=' {
-				tok = token.NOT_EQ_BIT
+				tok = token.XOR_EQ
 				l.next()
 			}
 		case '-':

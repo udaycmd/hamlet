@@ -43,7 +43,7 @@ var (
 
 func (e *ParseError) Error() string {
 	if e.position.FileName != "" || e.position.IsValid() {
-		return fmt.Sprintf("%s at %s", e.msg, e.position)
+		return fmt.Sprintf("%s: %s", e.position, e.msg)
 	}
 
 	return fmt.Sprintf("%s", e.msg)
@@ -164,6 +164,7 @@ func (p *Parser) next() {
 func (p *Parser) synchronize(to map[token.Tok]bool) {
 	for ; p.kind != token.EOF; p.next() {
 		if to[p.kind] {
+			// hang safety
 			if p.pos == p.syncPos && p.syncCount < 10 {
 				p.syncCount++
 				return
@@ -247,16 +248,18 @@ func (p *Parser) expectComma(gotAfter token.Tok, wantAfter string) bool {
 	return false
 }
 
-func (p *Parser) parseSimpleStmt() Stmt {
-	return nil
-}
-
 func (p *Parser) parseStmt() Stmt {
 	if p.tracing {
 		defer untrace(trace(p, "Stmt"))
 	}
 
 	switch p.kind {
+	case token.IDENTIFIER, token.INTEGER, token.REAL, token.CHAR, token.STRING, token.TRUE, token.FALSE,
+		token.EMPTY, token.IMPORT, token.LEFT_PAREN, token.LEFT_BRACE, token.LEFT_BRACKET,
+		token.PLUS, token.MINUS, token.AND, token.XOR, token.BANG:
+		s := p.parseExprStmt(false)
+		p.expectSemicolon()
+		return s
 	case token.IF:
 		return p.parseIfStmt()
 	case token.FOR:
@@ -277,7 +280,7 @@ func (p *Parser) parseStmt() Stmt {
 		return p.parseBranchStmt(p.kind)
 	default:
 		pos := p.pos
-		p.errorExpected(pos, "<statement>")
+		p.errorExpected(pos, "'statement'")
 		p.synchronize(stmtStarters)
 		return &BadStmt{From: pos, To: pos}
 	}
@@ -305,7 +308,7 @@ func (p *Parser) parseIfCond() Expr {
 	if x, ok := condStmt.(*ExprStmt); ok {
 		cond = x.e
 	} else {
-		p.errorExpected(condStmt.Start(), "<bool_expression>")
+		p.errorExpected(condStmt.Start(), "'boolean expression'")
 		return &BadExpr{From: condStmt.Start(), To: condStmt.End()}
 	}
 
@@ -332,7 +335,7 @@ func (p *Parser) parseIfStmt() Stmt {
 			elseStmt = p.parseBlockStmt()
 			p.expectSemicolon()
 		default:
-			p.errorExpected(p.pos, "<if_expression> or <block_statement>")
+			p.errorExpected(p.pos, "'if expression' or 'block_statement'")
 			elseStmt = &BadStmt{From: p.pos, To: p.pos}
 		}
 
@@ -445,20 +448,20 @@ func (p *Parser) parseExprStmt(isForIn bool) Stmt {
 				val, ok = x[0].(*Ident)
 
 				if !ok {
-					p.errorExpected(x[0].Start(), "<identifier>")
-					val = &Ident{Name: "_", Pos: x[0].Start()}
+					p.errorExpected(x[0].Start(), "'identifier'")
+					val = &Ident{Name: "none", Pos: x[0].Start()}
 				}
 			case 2:
 				index, ok = x[0].(*Ident)
 				if !ok {
-					p.errorExpected(x[0].Start(), "<identifier>")
-					index = &Ident{Name: "_", Pos: x[0].Start()}
+					p.errorExpected(x[0].Start(), "'identifier'")
+					index = &Ident{Name: "none", Pos: x[0].Start()}
 				}
 
-				val, ok = x[0].(*Ident)
+				val, ok = x[1].(*Ident)
 				if !ok {
-					p.errorExpected(x[0].Start(), "<identifier>")
-					val = &Ident{Name: "_", Pos: x[0].Start()}
+					p.errorExpected(x[1].Start(), "'identifier'")
+					val = &Ident{Name: "none", Pos: x[1].Start()}
 				}
 			}
 
@@ -471,12 +474,12 @@ func (p *Parser) parseExprStmt(isForIn bool) Stmt {
 	}
 
 	if len(x) > 1 {
-		p.errorExpected(x[0].Start(), "one expression")
+		p.errorExpected(x[0].Start(), "'single expression'")
 	}
 
 	switch p.kind {
 	case token.PLUS_EQ, token.MINUS_EQ, token.STAR_EQ, token.SLASH_EQ, token.PERCENT_EQ,
-		token.AND_EQ, token.OR_EQ, token.NOT_EQ_BIT, token.LSHIFT_EQ, token.RSHIFT_EQ:
+		token.AND_EQ, token.OR_EQ, token.XOR_EQ, token.LSHIFT_EQ, token.RSHIFT_EQ:
 		opPos, opKind := p.pos, p.kind
 		p.next()
 		y := p.parseExpr()
@@ -539,31 +542,42 @@ func (p *Parser) parseDeclOrConstStmt(isConst bool) Stmt {
 		defer untrace(trace(p, "DeclOrConstStmt"))
 	}
 
-	specifier := token.Position(0)
-	if isConst {
-		specifier = p.expect(token.CONST)
-	} else {
+	var specifier token.Position
+	var ident *Ident
+	var equals token.Position
+	var x Expr
+
+	switch isConst {
+	case false:
 		specifier = p.expect(token.DECL)
-	}
+		ident = p.parseIdent()
 
-	ident := p.parseIdent()
-	equals := p.expect(token.ASSIGN)
-	x := p.parseExpr()
+		if p.kind == token.ASSIGN {
+			equals = p.pos
+			p.next()
+			x = p.parseExpr()
+		}
 
-	if isConst {
+		p.expectSemicolon()
+		return &DeclStmt{
+			Decl:  specifier,
+			Ident: ident,
+			Equal: equals,
+			Val:   x,
+		}
+	default:
+		specifier = p.expect(token.CONST)
+		ident = p.parseIdent()
+		equals = p.expect(token.ASSIGN)
+		x = p.parseExpr()
+
+		p.expectSemicolon()
 		return &ConstStmt{
 			Const: specifier,
 			Ident: ident,
 			Equal: equals,
 			Val:   x,
 		}
-	}
-
-	return &DeclStmt{
-		Decl:  specifier,
-		Ident: ident,
-		Equal: equals,
-		Val:   x,
 	}
 }
 
@@ -742,7 +756,7 @@ func (p *Parser) parseLogicalExpr() Expr {
 
 	lhs := p.parseTermExpr()
 	for p.kind == token.AND || p.kind == token.OR || p.kind == token.RIGHT_SHIFT ||
-		p.kind == token.LEFT_SHIFT || p.kind == token.CARET || p.kind == token.AMPERSAND || p.kind == token.PIPE {
+		p.kind == token.LEFT_SHIFT || p.kind == token.XOR || p.kind == token.AMPERSAND || p.kind == token.PIPE {
 		opKind, opPos := p.kind, p.pos
 		p.next()
 
@@ -808,7 +822,7 @@ func (p *Parser) parseUnaryExpr() Expr {
 	}
 
 	switch p.kind {
-	case token.TILDE, token.BANG:
+	case token.XOR, token.BANG, token.PLUS, token.MINUS:
 		opKind, opPos := p.kind, p.pos
 		p.next()
 
@@ -845,7 +859,7 @@ loop:
 				x = p.parseReceiverExpr(x)
 			default:
 				pos := p.pos
-				p.errorExpected(pos, "<receiver>")
+				p.errorExpected(pos, "'receiver' name")
 				p.synchronize(stmtStarters)
 				return &BadExpr{From: pos, To: p.pos}
 			}
@@ -965,9 +979,9 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 		i, err := strconv.ParseInt(p.tokenLit, 0, 64)
 		if err != nil {
 			if err == strconv.ErrRange {
-				p.error(p.pos, "<integer_too_big>")
+				p.error(p.pos, "'integer_too_big'")
 			} else {
-				p.error(p.pos, "<invalid_integer>")
+				p.error(p.pos, "'invalid_integer'")
 			}
 		}
 		x := &IntLit{
@@ -982,9 +996,9 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 		f, err := strconv.ParseFloat(p.tokenLit, 64)
 		if err != nil {
 			if err == strconv.ErrRange {
-				p.error(p.pos, "<number_too_big>")
+				p.error(p.pos, "'number_too_big'")
 			} else {
-				p.error(p.pos, "<invalid_number>")
+				p.error(p.pos, "'invalid_number'")
 			}
 		}
 		x := &FloatLit{
@@ -1038,10 +1052,9 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 	case token.LEFT_BRACKET:
 		return p.parseArrayLiteral()
 	default:
-		p.errorExpected(p.pos, "<expr>")
+		p.errorExpected(p.pos, "'expression'")
 	}
 
-	// something is wrong!
 	pos := p.pos
 	p.synchronize(stmtStarters)
 	return &BadExpr{From: pos, To: p.pos}
@@ -1063,7 +1076,7 @@ func (p *Parser) parseKvLit() *KvLit {
 		v, _ := strconv.Unquote(p.tokenLit)
 		key = v
 	default:
-		p.errorExpected(pos, "<valid_key>")
+		p.errorExpected(pos, "'key'")
 	}
 
 	p.next()
@@ -1089,7 +1102,7 @@ func (p *Parser) parseMapLiteral() *MapLit {
 		kv = append(kv, p.parseKvLit())
 
 		// catches a trailing comma with no following KV pair
-		if !p.expectComma(token.RIGHT_BRACE, "<key_val_pair>") {
+		if !p.expectComma(token.RIGHT_BRACE, "'key-value pair'") {
 			break
 		}
 	}
@@ -1114,7 +1127,7 @@ func (p *Parser) parseArrayLiteral() *ArrayLit {
 		items = append(items, p.parseExpr())
 
 		// catches a trailing comma with no following array element
-		if !p.expectComma(token.RIGHT_BRACKET, "<array_element>") {
+		if !p.expectComma(token.RIGHT_BRACKET, "'array element'") {
 			break
 		}
 	}
@@ -1144,7 +1157,7 @@ func (p *Parser) parseCallExpr(x Expr) *CallExpr {
 		}
 
 		// catches a trailing comma with no following element
-		if !p.expectComma(token.RIGHT_PAREN, "<call_argument>") {
+		if !p.expectComma(token.RIGHT_PAREN, "'call argument'") {
 			break
 		}
 	}
@@ -1193,7 +1206,7 @@ func (p *Parser) parseImportExpr() Expr {
 	p.expect(token.LEFT_PAREN)
 
 	if p.kind != token.STRING {
-		p.errorExpected(p.pos, "<module_name>")
+		p.errorExpected(p.pos, "'module name'")
 		p.synchronize(stmtStarters)
 		return &BadExpr{From: pos, To: p.pos}
 	}
