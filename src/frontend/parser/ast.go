@@ -4,7 +4,7 @@
 
 package parser
 
-import "github.com/udaycmd/hamlet/src/token"
+import "github.com/udaycmd/hamlet/src/frontend/token"
 
 // --- AST Nodes ---
 

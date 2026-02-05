@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/udaycmd/hamlet/src/lexer"
-	"github.com/udaycmd/hamlet/src/token"
+	"github.com/udaycmd/hamlet/src/frontend/lexer"
+	"github.com/udaycmd/hamlet/src/frontend/token"
 )
 
 var testSrcManager = token.NewSourceManager()
@@ -25,10 +25,12 @@ type lexResult struct {
 }
 
 func fail(t *testing.T, msg string) {
+	t.Helper()
 	t.Errorf("%s", msg)
 }
 
 func expectEqual(t *testing.T, x, y any, msg string) {
+	t.Helper()
 	if !reflect.DeepEqual(x, y) {
 		if msg == "" {
 			msg = "unspecified failure!"

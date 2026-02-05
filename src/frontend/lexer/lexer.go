@@ -10,7 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/udaycmd/hamlet/src/token"
+	"github.com/udaycmd/hamlet/src/frontend/token"
 )
 
 const (
@@ -391,7 +391,7 @@ func (l *Lexer) Lex() (token.Tok, string, token.Position) {
 		switch c {
 		case eof:
 			if l.asi {
-				asi = false // eof consumed
+				l.asi = false // eof consumed
 				return token.SEMICOLON, "\n", pos
 			}
 

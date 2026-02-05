@@ -1,7 +1,7 @@
 .PHONY: all build vet clean test
 
 BUILD_DIR ?= build
-LDFLAGS :=	-s -w
+LDFLAGS :=	-s -w -extldflags="-static"
 
 all: build
 
@@ -12,10 +12,13 @@ vet: fmt
 	go vet ./...
 
 build: vet
-	go build -o $(BUILD_DIR)/hamlet -ldflags="$(LDFLAGS)" ./src
+	go build -o $(BUILD_DIR)/hamlet -ldflags="$(LDFLAGS)" ./src/
+
+debug: vet
+	go build -o $(BUILD_DIR)/hamlet.debug -race ./src/
 
 test:
-	-go test ./...
+	-go test -v -race ./...
 
 clean:
 	rm -r $(BUILD_DIR)

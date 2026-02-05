@@ -7,13 +7,12 @@ package parser
 import (
 	"fmt"
 	"io"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/udaycmd/hamlet/src/lexer"
-	"github.com/udaycmd/hamlet/src/token"
+	"github.com/udaycmd/hamlet/src/frontend/lexer"
+	"github.com/udaycmd/hamlet/src/frontend/token"
 )
 
 type (
@@ -93,7 +92,7 @@ func (pe ParseErrors) Error() string {
 	}
 }
 
-func (pe ParseErrors) err() error {
+func (pe ParseErrors) GetParseErrors() error {
 	if len(pe) == 0 {
 		return nil
 	}
@@ -258,23 +257,21 @@ func (p *Parser) Parse() (*File, error) {
 		}
 
 		p.errors.Sort()
-		err = p.errors.err()
+		err = p.errors.GetParseErrors()
 	}()
 
 	if p.tracing {
-		fullPath, _ := filepath.Abs(p.file.Name)
-		fmt.Fprintf(p.traceW, "AST Trace of [%s]\n\n", fullPath)
 		defer untrace(trace(p, "File"))
 	}
 
 	// if p.next() fails in NewParser()
 	if p.errors.Len() > 0 {
-		return nil, p.errors.err()
+		return nil, p.errors.GetParseErrors()
 	}
 
 	stmts := p.parseStmtList()
 	if p.errors.Len() > 0 {
-		return nil, p.errors.err()
+		return nil, p.errors.GetParseErrors()
 	}
 
 	return &File{SrcFile: p.file, Statements: stmts}, err
