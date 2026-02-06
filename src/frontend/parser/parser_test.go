@@ -13,33 +13,36 @@ import (
 
 // --- Test Helpers ---
 
-func fail(t *testing.T, msg string) {
+func fail(t *testing.T, format string, args ...any) {
 	t.Helper()
-	t.Errorf("%s", msg)
+	t.Errorf(format, args...)
 }
 
-func expectEqual(t *testing.T, x, y any, msg string) {
+func expectEqual(t *testing.T, x, y any, format string, args ...any) {
 	t.Helper()
-
 	if !reflect.DeepEqual(x, y) {
-		if msg == "" {
-			msg = "unspecified failure!"
-		}
-		fail(t, msg)
+		fail(t, format, args...)
 	}
 }
 
 func mustParse(t *testing.T, input string) *File {
 	t.Helper()
-
 	test := token.NewSourceManager()
 	testfile := test.AddFile("testfile", -1, len(input))
 	root, err := NewParser(testfile, []byte(input), 10, 0, nil).Parse()
 	if err != nil {
-		fail(t, "unexpected parse error: "+err.Error())
+		fail(t, "unexpected parse error: %s", err.Error())
 	}
 
 	return root
+}
+
+func expectParseError(t *testing.T, input string) error {
+	t.Helper()
+	test := token.NewSourceManager()
+	testfile := test.AddFile("testfile", -1, len(input))
+	_, err := NewParser(testfile, []byte(input), 10, 0, nil).Parse()
+	return err
 }
 
 // --- ParseError Tests ---
@@ -101,18 +104,19 @@ func TestParseIntLit(t *testing.T) {
 
 	for _, tc := range testCases {
 		file := mustParse(t, tc.input)
-		expectEqual(t, 1, len(file.Statements), "statement count for: "+tc.input)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
 
 		exprStmt, ok := file.Statements[0].(*ExprStmt)
 		if !ok {
-			t.Fatalf("expected ExprStmt for input: %s", tc.input)
+			fail(t, "expected ExprStmt for input: %s", tc.input)
 		}
 
 		intLit, ok := exprStmt.e.(*IntLit)
 		if !ok {
-			t.Fatalf("expected IntLit for input: %s", tc.input)
+			fail(t, "expected IntLit for input: %s", tc.input)
 		}
-		expectEqual(t, tc.expected, intLit.Val, "int value for: "+tc.input)
+
+		expectEqual(t, tc.expected, intLit.Val, "int value for: %s", tc.input)
 	}
 }
 
@@ -128,16 +132,19 @@ func TestParseFloatLit(t *testing.T) {
 
 	for _, tc := range testCases {
 		file := mustParse(t, tc.input)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
+
 		exprStmt, ok := file.Statements[0].(*ExprStmt)
 		if !ok {
-			t.Fatalf("expected ExprStmt for input: %s", tc.input)
+			fail(t, "expected ExprStmt for input: %s", tc.input)
 		}
 
 		floatLit, ok := exprStmt.e.(*FloatLit)
 		if !ok {
-			t.Fatalf("expected FloatLit for input: %s", tc.input)
+			fail(t, "expected FloatLit for input: %s", tc.input)
 		}
-		expectEqual(t, tc.expected, floatLit.Val, "float value for: "+tc.input)
+
+		expectEqual(t, tc.expected, floatLit.Val, "float value for: %s", tc.input)
 	}
 }
 
@@ -152,6 +159,8 @@ func TestParseStringLit(t *testing.T) {
 
 	for _, tc := range testCases {
 		file := mustParse(t, tc.input)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
+
 		exprStmt, ok := file.Statements[0].(*ExprStmt)
 		if !ok {
 			t.Fatalf("expected ExprStmt for input: %s", tc.input)
@@ -159,9 +168,10 @@ func TestParseStringLit(t *testing.T) {
 
 		strLit, ok := exprStmt.e.(*StringLit)
 		if !ok {
-			t.Fatalf("expected StringLit for input: %s", tc.input)
+			fail(t, "expected StringLit for input: %s", tc.input)
 		}
-		expectEqual(t, tc.expected, strLit.Val, "string value for: "+tc.input)
+
+		expectEqual(t, tc.expected, strLit.Val, "string value for: %s", tc.input)
 	}
 }
 
@@ -175,8 +185,10 @@ func TestParseBoolLit(t *testing.T) {
 	} {
 		file := mustParse(t, tc.input)
 		exprStmt := file.Statements[0].(*ExprStmt)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
+
 		boolLit := exprStmt.e.(*BoolLit)
-		expectEqual(t, tc.expected, boolLit.Val, "bool value for: "+tc.input)
+		expectEqual(t, tc.expected, boolLit.Val, "bool value for: %s", tc.input)
 	}
 }
 
@@ -190,8 +202,10 @@ func TestParseCharLit(t *testing.T) {
 	} {
 		file := mustParse(t, tc.input)
 		exprStmt := file.Statements[0].(*ExprStmt)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
+
 		charLit := exprStmt.e.(*CharLit)
-		expectEqual(t, tc.expected, charLit.Val, "char value for: "+tc.input)
+		expectEqual(t, tc.expected, charLit.Val, "char value for: %s", tc.input)
 	}
 }
 
@@ -200,7 +214,7 @@ func TestParseEmptyLit(t *testing.T) {
 	exprStmt := file.Statements[0].(*ExprStmt)
 	_, ok := exprStmt.e.(*EmptyLit)
 	if !ok {
-		t.Fatal("expected EmptyLit")
+		fail(t, "expected EmptyLit")
 	}
 }
 
@@ -229,8 +243,10 @@ func TestParseUnaryExpr(t *testing.T) {
 	} {
 		file := mustParse(t, tc.input)
 		exprStmt := file.Statements[0].(*ExprStmt)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
+
 		unaryExpr := exprStmt.e.(*UnaryExpr)
-		expectEqual(t, tc.op, unaryExpr.Op, "unary operator for: "+tc.input)
+		expectEqual(t, tc.op, unaryExpr.Op, "unary operator for: %s", tc.input)
 	}
 }
 
@@ -252,8 +268,10 @@ func TestParseBinaryExpr(t *testing.T) {
 	} {
 		file := mustParse(t, tc.input)
 		exprStmt := file.Statements[0].(*ExprStmt)
+		expectEqual(t, 1, len(file.Statements), "statement count for: %s", tc.input)
+
 		binaryExpr := exprStmt.e.(*BinaryExpr)
-		expectEqual(t, tc.op, binaryExpr.Op, "binary operator for: "+tc.input)
+		expectEqual(t, tc.op, binaryExpr.Op, "binary operator for: %s", tc.input)
 	}
 }
 
@@ -263,15 +281,15 @@ func TestParseGroupedExpr(t *testing.T) {
 	grouped := exprStmt.e.(*GroupedExpr)
 	_, ok := grouped.X.(*BinaryExpr)
 	if !ok {
-		t.Fatal("expected BinaryExpr inside GroupedExpr")
+		fail(t, "expected BinaryExpr inside GroupedExpr")
 	}
 }
 
 func TestParseTernaryExpr(t *testing.T) {
 	file := mustParse(t, "a ? b : c")
 	exprStmt := file.Statements[0].(*ExprStmt)
-	ternary := exprStmt.e.(*TernaryExpr)
 
+	ternary := exprStmt.e.(*TernaryExpr)
 	cond := ternary.X.(*Ident)
 	expectEqual(t, "a", cond.Name, "condition ident")
 
@@ -353,6 +371,15 @@ func TestParseSliceExpr(t *testing.T) {
 	expectEqual(t, "arr", ident.Name, "sliced expression")
 }
 
+func TestParseSliceExprNoOffset(t *testing.T) {
+	file := mustParse(t, "arr[:]")
+	exprStmt := file.Statements[0].(*ExprStmt)
+	sliceExpr := exprStmt.e.(*SliceExpr)
+
+	expectEqual(t, nil, sliceExpr.Lo, "no low slice offset")
+	expectEqual(t, nil, sliceExpr.Hi, "no high slice offset")
+}
+
 // --- Receiver Expression Tests ---
 
 func TestParseReceiverExpr(t *testing.T) {
@@ -375,7 +402,7 @@ func TestParseIfStmt(t *testing.T) {
 	expectEqual(t, "x", cond.Name, "condition")
 
 	if ifStmt.Else != nil {
-		t.Error("expected no else clause")
+		fail(t, "expected no else clause")
 	}
 }
 
@@ -384,12 +411,12 @@ func TestParseIfElseStmt(t *testing.T) {
 	ifStmt := file.Statements[0].(*IfStmt)
 
 	if ifStmt.Else == nil {
-		t.Fatal("expected else clause")
+		fail(t, "expected else clause")
 	}
 
 	_, ok := ifStmt.Else.(*BlockStmt)
 	if !ok {
-		t.Fatal("expected BlockStmt as else clause")
+		fail(t, "expected BlockStmt as else clause")
 	}
 }
 
@@ -407,7 +434,7 @@ func TestParseForStmt(t *testing.T) {
 	forStmt := file.Statements[0].(*ForStmt)
 
 	if forStmt.Cond != nil {
-		t.Error("expected no condition for infinite loop")
+		fail(t, "expected no condition for infinite loop")
 	}
 }
 
@@ -416,12 +443,12 @@ func TestParseForCondStmt(t *testing.T) {
 	forStmt := file.Statements[0].(*ForStmt)
 
 	if forStmt.Cond == nil {
-		t.Fatal("expected condition in for loop")
+		fail(t, "expected condition in for loop")
 	}
 
 	_, ok := forStmt.Cond.(*BinaryExpr)
 	if !ok {
-		t.Fatal("expected BinaryExpr as condition")
+		fail(t, "expected BinaryExpr as condition")
 	}
 }
 
@@ -436,6 +463,32 @@ func TestParseForInWithIndexStmt(t *testing.T) {
 	forInStmt := file.Statements[0].(*ForInStmt)
 	expectEqual(t, "i", forInStmt.Index.Name, "index variable")
 	expectEqual(t, "v", forInStmt.Val.Name, "value variable")
+}
+
+func TestParseForInWithUntilSeqWithoutIndex(t *testing.T) {
+	file := mustParse(t, "for v in 0 until 5 { v }")
+	forInStmt := file.Statements[0].(*ForInStmt)
+	expectEqual(t, "v", forInStmt.Val.Name, "value variable")
+	if forInStmt.Index != nil {
+		fail(t, "expected forIn index to be nil")
+	}
+
+	_, ok := forInStmt.Iterable.(*RangeExpr)
+	if !ok {
+		fail(t, "expected rangeExpr in forIn.Iterable")
+	}
+}
+
+func TestParseForInWithUntilSeqWithIndex(t *testing.T) {
+	file := mustParse(t, "for i, v in 0 until 5 { v }")
+	forInStmt := file.Statements[0].(*ForInStmt)
+	expectEqual(t, "i", forInStmt.Index.Name, "index variable")
+	expectEqual(t, "v", forInStmt.Val.Name, "value variable")
+
+	_, ok := forInStmt.Iterable.(*RangeExpr)
+	if !ok {
+		fail(t, "expected rangeExpr in forIn.Iterable")
+	}
 }
 
 func TestParseProcStmt(t *testing.T) {
@@ -474,7 +527,7 @@ func TestParseDeclStmtNoInit(t *testing.T) {
 	expectEqual(t, "x", declStmt.Ident.Name, "decl ident")
 
 	if declStmt.Val != nil {
-		t.Error("expected nil value for uninitialized decl")
+		fail(t, "expected nil value for uninitialized decl")
 	}
 }
 
@@ -486,6 +539,11 @@ func TestParseConstStmt(t *testing.T) {
 
 	floatLit := constStmt.Val.(*FloatLit)
 	expectEqual(t, 3.14, floatLit.Val, "const value")
+}
+
+func TestParseUninitializedConstStmt(t *testing.T) {
+	err := expectParseError(t, "const PI")
+	expectEqual(t, "testfile(1, 9): expected '=', found newline", err.Error(), "Uninitialized const error")
 }
 
 func TestParseReturnStmt(t *testing.T) {
@@ -531,10 +589,11 @@ func TestParseCompoundAssignStmt(t *testing.T) {
 		{"x -= 1", token.MINUS_EQ},
 		{"x *= 2", token.STAR_EQ},
 		{"x /= 2", token.SLASH_EQ},
+		{"x ^= 1", token.XOR_EQ},
 	} {
 		file := mustParse(t, tc.input)
 		assignStmt := file.Statements[0].(*AssignStmt)
-		expectEqual(t, tc.op, assignStmt.EqType, "compound assign type for: "+tc.input)
+		expectEqual(t, tc.op, assignStmt.EqType, "compound assign type for: %s", tc.input)
 	}
 }
 
@@ -551,16 +610,16 @@ func TestParseBranchStmt(t *testing.T) {
 		file := mustParse(t, input)
 		branchStmt := file.Statements[0].(*BranchStmt)
 		if branchStmt.Pos == 0 {
-			t.Errorf("expected valid position for: %s", input)
+			fail(t, "expected valid position for: %s", input)
 		}
 	}
 }
 
 func TestParseImportExpr(t *testing.T) {
-	file := mustParse(t, `import("module")`)
+	file := mustParse(t, `import("std")`)
 	exprStmt := file.Statements[0].(*ExprStmt)
 	importExpr := exprStmt.e.(*ImportExpr)
-	expectEqual(t, "module", importExpr.ModuleName, "module name")
+	expectEqual(t, "std", importExpr.ModuleName, "module name")
 }
 
 func TestParseProcLit(t *testing.T) {
@@ -578,7 +637,7 @@ func TestOperatorPrecedence(t *testing.T) {
 	file := mustParse(t, "1 + 2 * 3")
 	exprStmt := file.Statements[0].(*ExprStmt)
 
-	// Should be parsed as (1 + (2 * 3))
+	// Should be parsed as 1 + (2 * 3)
 	addExpr := exprStmt.e.(*BinaryExpr)
 	expectEqual(t, token.PLUS, addExpr.Op, "outer operator should be +")
 
@@ -598,8 +657,14 @@ func TestParseNestedExpressions(t *testing.T) {
 	exprStmt := file.Statements[0].(*ExprStmt)
 
 	grouped := exprStmt.e.(*GroupedExpr)
-	_, ok := grouped.X.(*BinaryExpr)
+	mulExpr, ok := grouped.X.(*BinaryExpr)
 	if !ok {
-		t.Fatal("expected BinaryExpr inside GroupedExpr")
+		fail(t, "expected BinaryExpr inside GroupedExpr")
 	}
+
+	// Should be parsed as (1 + 2) * 3
+	expectEqual(t, token.STAR, mulExpr.Op, "outer operator should be *")
+
+	addExpr := mulExpr.Lhs.(*GroupedExpr).X.(*BinaryExpr)
+	expectEqual(t, token.PLUS, addExpr.Op, "inner operator should be +")
 }

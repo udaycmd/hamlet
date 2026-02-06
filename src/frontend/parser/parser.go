@@ -673,7 +673,7 @@ func (p *Parser) parseExpr() Expr {
 	}
 
 	if p.kind == token.UNTIL {
-		p.parseRangeExpr(x)
+		return p.parseRangeExpr(x)
 	}
 
 	return x
@@ -1169,7 +1169,7 @@ func (p *Parser) parseRangeExpr(x Expr) *RangeExpr {
 		defer untrace(trace(p, "RangeExpr"))
 	}
 
-	ranger := p.kind
+	ranger := p.pos
 	p.next()
 	y := p.parseExpr()
 
@@ -1200,7 +1200,7 @@ func (p *Parser) parseIndexerExpr(x Expr) Expr {
 		p.next()
 
 		// parse e2, if present
-		if p.kind != token.LEFT_BRACKET && p.kind != token.EOF {
+		if p.kind != token.RIGHT_BRACKET && p.kind != token.EOF {
 			indices[1] = p.parseExpr()
 		}
 	}

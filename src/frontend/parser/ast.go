@@ -346,7 +346,7 @@ type (
 
 	RangeExpr struct {
 		Lhs    Expr
-		Ranger token.Tok
+		Ranger token.Position
 		Rhs    Expr
 	}
 )
