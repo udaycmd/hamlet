@@ -4,8 +4,6 @@
 
 package token
 
-import "fmt"
-
 type Tok uint8
 
 const (
@@ -195,8 +193,7 @@ var keywords map[string]Tok
 
 func (t Tok) String() string {
 	if int(t) >= len(tokens) || tokens[t] == "" {
-		x := fmt.Sprintf("%d", t)
-		panic("unknown token encountered" + x)
+		panic("unknown token encountered")
 	}
 
 	return tokens[t]

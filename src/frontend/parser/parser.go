@@ -473,7 +473,7 @@ func (p *Parser) parseForStmt() Stmt {
 	//
 	// 2. value ranged loops
 	// 		for v in <iterable> {}
-	// 		for x in s..e {}
+	// 		for x in s until e {}
 	//
 	// 3. index, value based loops
 	// 		for i, v in <iterable> {}

@@ -9,5 +9,5 @@ type Scope uint8
 const (
 	Module Scope = iota
 	Local
-	Closure
+	UpValue
 )
