@@ -228,6 +228,13 @@ type (
 	ImportExpr struct {
 		ModuleName string
 		Pos        token.Position
+		RParen     token.Position
+	}
+
+	TypeInfoExpr struct {
+		X      Expr
+		Pos    token.Position
+		RParen token.Position
 	}
 
 	CallExpr struct {
@@ -361,8 +368,11 @@ func (s *Ident) End() token.Position   { return token.Position(int(s.Pos) + len(
 
 func (e *ImportExpr) exprNode()             {}
 func (e *ImportExpr) Start() token.Position { return e.Pos }
-func (e *ImportExpr) End() token.Position   { return token.Position(int(e.Pos) + len(e.ModuleName) + 10) }
-func (e *ImportExpr) String() string        { return `import("` + e.ModuleName + `")` }
+func (e *ImportExpr) End() token.Position   { return e.RParen }
+
+func (e *TypeInfoExpr) exprNode()             {}
+func (e *TypeInfoExpr) Start() token.Position { return e.Pos }
+func (e *TypeInfoExpr) End() token.Position   { return e.RParen }
 
 func (e *CallExpr) exprNode()             {}
 func (e *CallExpr) Start() token.Position { return e.Proc.Start() }

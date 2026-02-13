@@ -20,7 +20,6 @@ const (
 	BREAK
 	CASE
 	CONTINUE
-	DEFAULT
 	ELSE
 	ENUM
 	PROC
@@ -29,7 +28,6 @@ const (
 	EXPORT
 	IF
 	IN
-	MAP
 	RETURN
 	CONCEPT
 	SWITCH
@@ -123,7 +121,6 @@ var tokens = [...]string{
 	BREAK:         "break",
 	CASE:          "case",
 	CONTINUE:      "continue",
-	DEFAULT:       "default",
 	ELSE:          "else",
 	ENUM:          "enum",
 	PROC:          "proc",
@@ -132,7 +129,6 @@ var tokens = [...]string{
 	EXPORT:        "export",
 	IF:            "if",
 	IN:            "in",
-	MAP:           "map",
 	RETURN:        "return",
 	CONCEPT:       "concept",
 	SWITCH:        "switch",
@@ -212,6 +208,23 @@ func IsIdent(name string) Tok {
 	}
 
 	return IDENTIFIER
+}
+
+func (t Tok) OpPrec() int {
+	switch t {
+	case EQUALS, BANG_EQ:
+		return 1
+	case LESS, LESS_EQ, GREATER, GREATER_EQ:
+		return 2
+	case AND, OR, RIGHT_SHIFT, LEFT_SHIFT, XOR, AMPERSAND, PIPE:
+		return 3
+	case PLUS, MINUS:
+		return 4
+	case STAR, SLASH, PERCENT:
+		return 5
+	default:
+		return 0 // invalid precedence
+	}
 }
 
 func init() {

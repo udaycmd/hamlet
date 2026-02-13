@@ -1,7 +1,0 @@
-for {}
-for v in range {}
-for i, v in range {}
-for i in 0 until 5 {}
-for i, v in 0 until 5 {}
-for (x >> 1 & b == 1) {}
-for true {}

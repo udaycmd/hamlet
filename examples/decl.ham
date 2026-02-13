@@ -1,2 +1,0 @@
-decl x = proc (a, b, c) {}
-const y = 10

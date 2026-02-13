@@ -32,9 +32,6 @@ func fail(t *testing.T, msg string) {
 func expectEqual(t *testing.T, x, y any, msg string) {
 	t.Helper()
 	if !reflect.DeepEqual(x, y) {
-		if msg == "" {
-			msg = "unspecified failure!"
-		}
 		fail(t, msg)
 	}
 }

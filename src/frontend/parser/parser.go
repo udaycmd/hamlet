@@ -193,7 +193,7 @@ func (p *Parser) error(pos token.Position, msg string) {
 }
 
 func (p *Parser) errorExpected(pos token.Position, msg string) {
-	msg = "expected " + msg
+	msg = fmt.Sprintf("expected %s", msg)
 
 	if pos == p.pos {
 		switch {
@@ -295,7 +295,7 @@ func (p *Parser) parseStmt() Stmt {
 
 	switch p.kind {
 	case token.IDENTIFIER, token.INTEGER, token.REAL, token.CHAR, token.STRING, token.TRUE, token.FALSE,
-		token.EMPTY, token.IMPORT, token.LEFT_PAREN, token.LEFT_BRACE, token.LEFT_BRACKET,
+		token.EMPTY, token.IMPORT, token.LEFT_PAREN, token.LEFT_BRACE, token.LEFT_BRACKET, token.TYPE_INFO,
 		token.PLUS, token.MINUS, token.AND, token.XOR, token.BANG:
 		s := p.parseExprStmt(false)
 		p.expectSemicolon()
@@ -666,7 +666,7 @@ func (p *Parser) parseExpr() Expr {
 		defer untrace(trace(p, "Expr"))
 	}
 
-	x := p.parseEqualityExpr()
+	x := p.parseBinaryExpr(1)
 
 	if p.kind == token.QUESTION {
 		return p.parseTernaryExpr(x)
@@ -679,116 +679,29 @@ func (p *Parser) parseExpr() Expr {
 	return x
 }
 
-func (p *Parser) parseEqualityExpr() Expr {
+func (p *Parser) parseBinaryExpr(prec int) Expr {
 	if p.tracing {
-		defer untrace(trace(p, "EqualityExpr"))
-	}
-
-	lhs := p.parseComparisonExpr()
-	for p.kind == token.EQUALS || p.kind == token.BANG_EQ {
-		opKind, opPos := p.kind, p.pos
-		p.next()
-
-		rhs := p.parseComparisonExpr()
-		lhs = &BinaryExpr{
-			Lhs:   lhs,
-			Op:    opKind,
-			OpPos: opPos,
-			Rhs:   rhs,
-		}
-	}
-
-	return lhs
-}
-
-func (p *Parser) parseComparisonExpr() Expr {
-	if p.tracing {
-		defer untrace(trace(p, "ComparisonExpr"))
-	}
-
-	lhs := p.parseLogicalExpr()
-	for p.kind == token.LESS || p.kind == token.GREATER ||
-		p.kind == token.LESS_EQ || p.kind == token.GREATER_EQ {
-		opKind, opPos := p.kind, p.pos
-		p.next()
-
-		rhs := p.parseLogicalExpr()
-		lhs = &BinaryExpr{
-			Lhs:   lhs,
-			Op:    opKind,
-			OpPos: opPos,
-			Rhs:   rhs,
-		}
-	}
-
-	return lhs
-}
-
-func (p *Parser) parseLogicalExpr() Expr {
-	if p.tracing {
-		defer untrace(trace(p, "LogicalExpr"))
-	}
-
-	lhs := p.parseTermExpr()
-	for p.kind == token.AND || p.kind == token.OR || p.kind == token.RIGHT_SHIFT ||
-		p.kind == token.LEFT_SHIFT || p.kind == token.XOR || p.kind == token.AMPERSAND || p.kind == token.PIPE {
-		opKind, opPos := p.kind, p.pos
-		p.next()
-
-		rhs := p.parseTermExpr()
-		lhs = &BinaryExpr{
-			Lhs:   lhs,
-			Op:    opKind,
-			OpPos: opPos,
-			Rhs:   rhs,
-		}
-	}
-
-	return lhs
-}
-
-func (p *Parser) parseTermExpr() Expr {
-	if p.tracing {
-		defer untrace(trace(p, "TermExpr"))
-	}
-
-	lhs := p.parseFactorizedExpr()
-	for p.kind == token.PLUS || p.kind == token.MINUS {
-		opKind, opPos := p.kind, p.pos
-		p.next()
-
-		rhs := p.parseFactorizedExpr()
-		lhs = &BinaryExpr{
-			Lhs:   lhs,
-			Op:    opKind,
-			OpPos: opPos,
-			Rhs:   rhs,
-		}
-	}
-
-	return lhs
-}
-
-func (p *Parser) parseFactorizedExpr() Expr {
-	if p.tracing {
-		defer untrace(trace(p, "FactorizedExpr"))
+		defer untrace(trace(p, "BinaryExpr"))
 	}
 
 	lhs := p.parseUnaryExpr()
-	for p.kind == token.STAR || p.kind == token.SLASH {
-		opKind, opPos := p.kind, p.pos
-		p.next()
 
-		rhs := p.parseUnaryExpr()
+	for {
+		op, prec0 := p.kind, p.kind.OpPrec()
+		if prec0 < prec {
+			return lhs
+		}
+
+		pos := p.expect(op)
+		rhs := p.parseBinaryExpr(prec + 1)
+
 		lhs = &BinaryExpr{
 			Lhs:   lhs,
-			Op:    opKind,
-			OpPos: opPos,
 			Rhs:   rhs,
+			Op:    op,
+			OpPos: pos,
 		}
 	}
-
-	return lhs
 }
 
 func (p *Parser) parseUnaryExpr() Expr {
@@ -916,6 +829,8 @@ func (p *Parser) parseLiteralOrSubExpr() Expr {
 		return p.parseProcLit()
 	case token.IMPORT:
 		return p.parseImportExpr()
+	case token.TYPE_INFO:
+		return p.parseTypeInfoExpr()
 	case token.IDENTIFIER:
 		return p.parseIdent()
 	case token.LEFT_PAREN:
@@ -998,14 +913,32 @@ func (p *Parser) parseImportExpr() Expr {
 	}
 
 	unquotedName, _ := strconv.Unquote(p.tokenLit)
-	expr := &ImportExpr{
+	p.next()
+	rparen := p.expect(token.RIGHT_PAREN)
+
+	return &ImportExpr{
 		ModuleName: unquotedName,
 		Pos:        pos,
+		RParen:     rparen,
+	}
+}
+
+func (p *Parser) parseTypeInfoExpr() *TypeInfoExpr {
+	if p.tracing {
+		defer untrace(trace(p, "TypeInfoExpr"))
 	}
 
+	pos := p.pos
 	p.next()
-	p.expect(token.RIGHT_PAREN)
-	return expr
+	p.expect(token.LEFT_PAREN)
+	x := p.parseExpr()
+	rparen := p.expect(token.RIGHT_PAREN)
+
+	return &TypeInfoExpr{
+		X:      x,
+		Pos:    pos,
+		RParen: rparen,
+	}
 }
 
 func (p *Parser) parseIdentList() *IdentList {

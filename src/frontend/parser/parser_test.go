@@ -622,6 +622,17 @@ func TestParseImportExpr(t *testing.T) {
 	expectEqual(t, "std", importExpr.ModuleName, "module name")
 }
 
+func TestParseTypeInfoExpr(t *testing.T) {
+	file := mustParse(t, `type_info(123)`)
+	file1 := mustParse(t, `type_info("Hello, World")`)
+
+	exprStmt := file.Statements[0].(*ExprStmt)
+	exprStmt1 := file1.Statements[0].(*ExprStmt)
+
+	expectEqual(t, int64(123), exprStmt.e.(*TypeInfoExpr).X.(*IntLit).Val, "integer literal")
+	expectEqual(t, "Hello, World", exprStmt1.e.(*TypeInfoExpr).X.(*StringLit).Val, "string literal")
+}
+
 func TestParseProcLit(t *testing.T) {
 	file := mustParse(t, "x = proc(x) { x }")
 	assignStmt := file.Statements[0].(*AssignStmt)
