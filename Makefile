@@ -21,4 +21,4 @@ test:
 	-go test -v -race ./...
 
 clean:
-	rm -r $(BUILD_DIR)
+	$(RM) $(BUILD_DIR)/*
