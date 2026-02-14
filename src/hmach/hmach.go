@@ -7,7 +7,8 @@ package hmach
 type Opcode byte
 
 const (
-	Push Opcode = iota + 32
+	Halt Opcode = iota + 32
+	Push
 	Pop
 	Duplicate
 	Swap
@@ -31,6 +32,7 @@ const (
 )
 
 var opcodes = [...]string{
+	Halt:           "hlt",
 	Push:           "push",
 	Pop:            "pop",
 	Duplicate:      "dup",

@@ -23,7 +23,7 @@ const (
 	ParseComment
 )
 
-var (
+const (
 	ErrUnexpectedNullChar        = "unexpected NULL character"
 	ErrUnexpectedUnicodeChar     = "unexpected unicode codepoint"
 	ErrIllegalBOM                = "illegal byte order mark"

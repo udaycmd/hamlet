@@ -2,12 +2,11 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package compiler
+package hmach
 
-type HObject struct {
-	// TODO: (change this)
-	Type int
-	Val  int
+type Instruction struct {
+	Opc Opcode
 }
 
-type Object = HObject
+type HmachVM struct {
+}
