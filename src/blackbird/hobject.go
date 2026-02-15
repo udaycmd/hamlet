@@ -6,6 +6,7 @@ package blackbird
 
 import (
 	"errors"
+	"math"
 
 	"github.com/udaycmd/hamlet/src/frontend/token"
 	"github.com/udaycmd/hamlet/src/hmach/runtime"
@@ -221,20 +222,436 @@ func (o *IntegerObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
 
 			return False, nil
 		}
+	case *FloatObject:
+		switch op {
+		case token.PLUS:
+			return &FloatObject{Val: float64(o.Val) + rhs.Val}, nil
+		case token.MINUS:
+			return &FloatObject{Val: float64(o.Val) - rhs.Val}, nil
+		case token.STAR:
+			return &FloatObject{Val: float64(o.Val) * rhs.Val}, nil
+		case token.SLASH:
+			return &FloatObject{Val: float64(o.Val) / rhs.Val}, nil
+		case token.LESS:
+			if float64(o.Val) < rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER:
+			if float64(o.Val) > rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.LESS_EQ:
+			if float64(o.Val) <= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER_EQ:
+			if float64(o.Val) >= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		}
+	case *CharObject:
+		switch op {
+		case token.PLUS:
+			return &CharObject{Val: rune(o.Val) + rhs.Val}, nil
+		case token.MINUS:
+			return &CharObject{Val: rune(o.Val) - rhs.Val}, nil
+		case token.LESS:
+			if o.Val < int64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER:
+			if o.Val > int64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		case token.LESS_EQ:
+			if o.Val <= int64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER_EQ:
+			if o.Val >= int64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		}
 	}
 
 	return nil, errors.New(runtime.ErrIllegalOperation)
+}
+
+// Real/Floating Point Number Object
+type FloatObject struct {
+	RObject
+	Val float64
+}
+
+func (o *FloatObject) Value() any    { return o.Val }
+func (o *FloatObject) Type() string  { return "<float>" }
+func (o *FloatObject) Falsy() bool   { return math.IsNaN(o.Val) }
+func (o *FloatObject) Copy() HObject { return &FloatObject{Val: o.Val} }
+func (o *FloatObject) Equals(a HObject) bool {
+	if t, ok := a.(*FloatObject); ok {
+		return o.Val == t.Val
+	}
+	return false
+}
+func (o *FloatObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
+	switch rhs := rhs.(type) {
+	case *FloatObject:
+		switch op {
+		case token.PLUS:
+			r := o.Val + rhs.Val
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.MINUS:
+			r := o.Val - rhs.Val
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.STAR:
+			r := o.Val * rhs.Val
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.SLASH:
+			r := o.Val / rhs.Val
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.LESS:
+			if o.Val < rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER:
+			if o.Val > rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.LESS_EQ:
+			if o.Val <= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER_EQ:
+			if o.Val >= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		}
+	case *IntegerObject:
+		switch op {
+		case token.PLUS:
+			r := o.Val + float64(rhs.Val)
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.MINUS:
+			r := o.Val - float64(rhs.Val)
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.STAR:
+			r := o.Val * float64(rhs.Val)
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.SLASH:
+			r := o.Val / float64(rhs.Val)
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &FloatObject{Val: r}, nil
+		case token.LESS:
+			if o.Val < float64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER:
+			if o.Val > float64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		case token.LESS_EQ:
+			if o.Val <= float64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER_EQ:
+			if o.Val >= float64(rhs.Val) {
+				return True, nil
+			}
+
+			return False, nil
+		}
+	}
+
+	return nil, errors.New(runtime.ErrIllegalOperation)
+}
+
+// Character Object
+type CharObject struct {
+	RObject
+	Val rune
+}
+
+func (o *CharObject) Value() any    { return o.Val }
+func (o *CharObject) Type() string  { return "<char>" }
+func (o *CharObject) Falsy() bool   { return o.Val == 0 }
+func (o *CharObject) Copy() HObject { return &CharObject{Val: o.Val} }
+func (o *CharObject) Equals(a HObject) bool {
+	if t, ok := a.(*CharObject); ok {
+		return o.Val == t.Val
+	}
+	return false
+}
+func (o *CharObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
+	switch rhs := rhs.(type) {
+	case *CharObject:
+		switch op {
+		case token.PLUS:
+			r := o.Val + rhs.Val
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &CharObject{Val: r}, nil
+		case token.MINUS:
+			r := o.Val - rhs.Val
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &CharObject{Val: r}, nil
+		case token.LESS:
+			if o.Val < rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER:
+			if o.Val > rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.LESS_EQ:
+			if o.Val <= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER_EQ:
+			if o.Val >= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		}
+	case *IntegerObject:
+		switch op {
+		case token.PLUS:
+			r := o.Val + rune(rhs.Val)
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &CharObject{Val: r}, nil
+		case token.MINUS:
+			r := o.Val - rune(rhs.Val)
+			if r == o.Val {
+				return o, nil
+			}
+
+			return &CharObject{Val: r}, nil
+		case token.LESS:
+			if int64(o.Val) < rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER:
+			if int64(o.Val) > rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.LESS_EQ:
+			if int64(o.Val) <= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		case token.GREATER_EQ:
+			if int64(o.Val) >= rhs.Val {
+				return True, nil
+			}
+
+			return False, nil
+		}
+	}
+
+	return nil, errors.New(runtime.ErrIllegalOperation)
+}
+
+type StrObject struct {
+	RObject
+	Val string
+}
+
+func (o *StrObject) Value() any    { return o.Val }
+func (o *StrObject) Type() string  { return "<string>" }
+func (o *StrObject) Falsy() bool   { return len(o.Val) == 0 }
+func (o *StrObject) Copy() HObject { return &StrObject{Val: o.Val} }
+func (o *StrObject) Equals(a HObject) bool {
+	if t, ok := a.(*StrObject); ok {
+		return o.Val == t.Val
+	}
+	return false
+}
+func (o *StrObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
+	switch rhs := rhs.(type) {
+	case *StrObject:
+		switch op {
+		case token.PLUS:
+			// TODO: check for resulting string length
+			return &StrObject{Val: o.Val + rhs.Val}, nil
+		}
+	}
+
+	return nil, errors.New(runtime.ErrIllegalOperation)
+}
+func (o *StrObject) Iterator() IObject {
+	v := []rune(o.Val)
+
+	return &StrIterator{
+		str: v,
+		sz:  len(v),
+	}
+}
+
+// [StrIterator] represents a [StrObject] iterator.
+type StrIterator struct {
+	RObject
+	index int
+	str   []rune
+	sz    int
+}
+
+func (io *StrIterator) Value() any            { return io.index }
+func (io *StrIterator) Type() string          { return "<str_iterator>" }
+func (io *StrIterator) Falsy() bool           { return true }
+func (io *StrIterator) Copy() HObject         { return &StrIterator{index: io.index, str: io.str, sz: io.sz} }
+func (io *StrIterator) Equals(_ HObject) bool { return false }
+func (io *StrIterator) K() HObject            { return &IntegerObject{Val: int64(io.index)} }
+func (io *StrIterator) V() HObject            { return &CharObject{Val: io.str[io.index-1]} }
+func (io *StrIterator) Next() bool {
+	io.index += 1
+	return io.index <= io.sz
+}
+
+// Array Object
+type Array struct {
+	RObject
+	Val []HObject
+}
+
+func (o *Array) Value() any    { return o.Val }
+func (o *Array) Type() string  { return "<array>" }
+func (o *Array) Falsy() bool   { return len(o.Val) == 0 }
+func (o *Array) Copy() HObject { return &Array{Val: o.Val} }
+func (o *Array) Equals(a HObject) bool {
+	t, ok := a.(*Array)
+	if !ok {
+		return false
+	}
+
+	if len(o.Val) != len(t.Val) {
+		return false
+	}
+
+	for i, o := range o.Val {
+		if !o.Equals(t.Val[i]) {
+			return false
+		}
+	}
+	return true
+}
+func (o *Array) Iterator() IObject {
+	return &ArrayIterator{
+		objs: o.Val,
+		sz:   len(o.Val),
+	}
+}
+
+// [ArrayIterator] represents a [Array] iterator.
+type ArrayIterator struct {
+	RObject
+	index int
+	objs  []HObject
+	sz    int
+}
+
+func (io *ArrayIterator) Value() any   { return io.index }
+func (io *ArrayIterator) Type() string { return "<array_iterator>" }
+func (io *ArrayIterator) Falsy() bool  { return true }
+func (io *ArrayIterator) Copy() HObject {
+	return &ArrayIterator{index: io.index, objs: io.objs, sz: io.sz}
+}
+func (io *ArrayIterator) Equals(_ HObject) bool { return false }
+func (io *ArrayIterator) K() HObject            { return &IntegerObject{Val: int64(io.index - 1)} }
+func (io *ArrayIterator) V() HObject            { return io.objs[io.index-1] }
+func (io *ArrayIterator) Next() bool {
+	io.index += 1
+	return io.index <= io.sz
 }
 
 // Hamlet Function/Procedure Object
 type HamletProcObject struct {
 	RObject
 	Name string
-	Proc HProc
+	proc HProc
 }
 
-func (o *HamletProcObject) Value() any                            { return o.Proc }
+func (o *HamletProcObject) Value() any                            { return o.proc }
 func (o *HamletProcObject) Type() string                          { return "<procedure>" }
-func (o *HamletProcObject) Copy() HObject                         { return &HamletProcObject{Name: o.Name, Proc: o.Proc} }
+func (o *HamletProcObject) Copy() HObject                         { return &HamletProcObject{Name: o.Name, proc: o.proc} }
 func (o *HamletProcObject) Equals(_ HObject) bool                 { return false }
-func (o *HamletProcObject) Call(args ...HObject) (HObject, error) { return o.Proc(args...) }
+func (o *HamletProcObject) Call(args ...HObject) (HObject, error) { return o.proc(args...) }
