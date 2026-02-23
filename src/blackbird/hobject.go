@@ -9,7 +9,6 @@ import (
 	"math"
 
 	"github.com/udaycmd/hamlet/src/frontend/token"
-	"github.com/udaycmd/hamlet/src/hmach/runtime"
 )
 
 type (
@@ -71,8 +70,8 @@ type (
 	RObject struct{}
 )
 
-func (o *RObject) Value() any                                         { panic(runtime.ErrIllegalOperation) }
-func (o *RObject) Type() string                                       { panic(runtime.ErrIllegalOperation) }
+func (o *RObject) Value() any                                         { panic("TODO: change this") }
+func (o *RObject) Type() string                                       { panic("TODO: change this") }
 func (o *RObject) Operate(op token.Tok, rhs HObject) (HObject, error) { return nil, nil }
 func (o *RObject) Falsy() bool                                        { return false }
 func (o *RObject) Copy() HObject                                      { return nil }
@@ -290,7 +289,7 @@ func (o *IntegerObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
 		}
 	}
 
-	return nil, errors.New(runtime.ErrIllegalOperation)
+	return nil, errors.New("TODO: change this")
 }
 
 // Real/Floating Point Number Object
@@ -423,7 +422,7 @@ func (o *FloatObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
 		}
 	}
 
-	return nil, errors.New(runtime.ErrIllegalOperation)
+	return nil, errors.New("TODO: change this")
 }
 
 // Character Object
@@ -528,7 +527,7 @@ func (o *CharObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
 		}
 	}
 
-	return nil, errors.New(runtime.ErrIllegalOperation)
+	return nil, errors.New("TODO: change this")
 }
 
 type StrObject struct {
@@ -556,7 +555,7 @@ func (o *StrObject) Operate(op token.Tok, rhs HObject) (HObject, error) {
 		}
 	}
 
-	return nil, errors.New(runtime.ErrIllegalOperation)
+	return nil, errors.New("TODO: change this")
 }
 func (o *StrObject) Iterator() IObject {
 	v := []rune(o.Val)
