@@ -69,7 +69,7 @@ func (st *SymbolTable) Insert(name string) *Symbol {
 }
 
 // LookUp resolves a symbol with a given name
-func (st *SymbolTable) LookUp(name string, toplvl bool) (*Symbol, int, bool) {
+func (st *SymbolTable) LookUp(name string) (*Symbol, int, bool) {
 	s, ok := st.table[name]
 	if ok {
 		return s, 0, true
@@ -79,7 +79,7 @@ func (st *SymbolTable) LookUp(name string, toplvl bool) (*Symbol, int, bool) {
 		return nil, 0, false
 	}
 
-	s, depth, ok := st.surrounding.LookUp(name, true)
+	s, depth, ok := st.surrounding.LookUp(name)
 	if !ok {
 		return nil, 0, false
 	}
