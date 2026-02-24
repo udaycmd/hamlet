@@ -2,17 +2,16 @@
 // Use of this source code is governed by MIT
 // license that can be found in the LICENSE file.
 
-package lexer_test
+package lexer
 
 import (
 	"fmt"
 	"math/rand"
-	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/udaycmd/hamlet/src/frontend/lexer"
 	"github.com/udaycmd/hamlet/src/frontend/token"
+	"github.com/udaycmd/hamlet/src/utils"
 )
 
 var testSrcManager = token.NewSourceManager()
@@ -22,18 +21,6 @@ type lexResult struct {
 	Kind   token.Tok
 	Line   int
 	Column int
-}
-
-func fail(t *testing.T, msg string) {
-	t.Helper()
-	t.Errorf("%s", msg)
-}
-
-func expectEqual(t *testing.T, x, y any, msg string) {
-	t.Helper()
-	if !reflect.DeepEqual(x, y) {
-		fail(t, msg)
-	}
 }
 
 func countLines(s string) int {
@@ -49,25 +36,27 @@ func countLines(s string) int {
 	return n
 }
 
-func lexExpect(t *testing.T, input string, mode lexer.LexMode, expected []lexResult) {
+func lexExpect(t *testing.T, input string, mode LexMode, expected []lexResult) {
 	testFile := testSrcManager.AddFile("testfile", -1, len(input))
 
-	l := lexer.NewLexer(testFile, []byte(input), func(msg string, _ token.SrcPos) { fail(t, msg) }, mode)
+	l := NewLexer(testFile, []byte(input), func(msg string, _ token.SrcPos) { utils.Fail(t, "%s", msg) }, mode)
 
 	for i, e := range expected {
 		tok, literal, pos := l.Lex()
 
 		srcPos := testFile.SrcPos(pos)
-		expectEqual(t, e.Kind, tok, fmt.Sprintf("(%d) expected: %s, got: %s", i, e.Kind, tok))
-		expectEqual(t, e.Lit, literal, "literal value not equal")
-		expectEqual(t, e.Line, srcPos.Line, "line number not synchronized")
-		expectEqual(t, e.Column, srcPos.Column, "column number not synchronized")
+		utils.ExpectEqual(t, e.Kind, tok, "%s", fmt.Sprintf("(%d) expected: %s, got: %s", i, e.Kind, tok))
+		utils.ExpectEqual(t, e.Lit, literal, "literal value not equal")
+		utils.ExpectEqual(t, e.Line, srcPos.Line, "line number not synchronized")
+		utils.ExpectEqual(t, e.Column, srcPos.Column, "column number not synchronized")
 	}
 
 	tok, _, _ := l.Lex()
-	expectEqual(t, token.EOF, tok, "more tokens left")
-	expectEqual(t, 0, l.ErrCount(), "error count not correct")
+	utils.ExpectEqual(t, token.EOF, tok, "more tokens left")
+	utils.ExpectEqual(t, 0, l.ErrCount(), "error count not correct")
 }
+
+// --- Token scanner tests ---
 
 func TestTokens(t *testing.T) {
 	testcases := []struct {
@@ -208,6 +197,6 @@ func TestTokens(t *testing.T) {
 		}
 	}
 
-	lexExpect(t, strings.Join(lines, "\n"), lexer.ParseComment|lexer.NoAsi, expected)
-	lexExpect(t, strings.Join(lines, "\n"), lexer.NoAsi, expectedSkipComments)
+	lexExpect(t, strings.Join(lines, "\n"), ParseComment|NoAsi, expected)
+	lexExpect(t, strings.Join(lines, "\n"), NoAsi, expectedSkipComments)
 }
