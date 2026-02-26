@@ -1,0 +1,6 @@
+UseTab: Always
+PointerAlignment: Left
+ColumnLimit: 150
+IndentWidth: 4
+TabWidth: 4
+AlignConsecutiveDeclarations: true

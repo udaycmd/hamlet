@@ -1,15 +1,31 @@
 #include "chunk.h"
+#include "opcode.h"
+#include <cstdio>
 
 namespace hmach {
 
-void Chunk::writeChunk(uint8_t byte, int line) {
-    code.push_back(byte);
-    lines.push_back(line);
+int dis_simple_inst(OpCode op, int offset) {
+	std::printf("%s\n", to_string(op));
+	return ++offset;
 }
 
-int Chunk::addConstant(Value value) {
-    constants.push_back(value);
-    return constants.size() - 1;
+void Chunk::write(OpCode op) { m_code.emplace_back(op); }
+
+void Chunk::dis(const char* name) {
+	std::printf("=== %s ===\n\n", name);
+
+	for (int offset = 0; offset < static_cast<int>(m_code.size());) {
+		std::printf("\t%05d ", offset);
+		auto op = m_code[offset];
+
+		switch (op) {
+		case hmach::OpCode::Return:
+			offset = dis_simple_inst(op, offset);
+			break;
+		default:
+			offset += 1;
+		}
+	}
 }
 
 } // namespace hmach
