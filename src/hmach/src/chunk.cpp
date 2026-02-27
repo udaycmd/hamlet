@@ -12,7 +12,7 @@ int dis_simple_inst(OpCode op, int offset) {
 void Chunk::write(OpCode op) { m_code.emplace_back(op); }
 
 void Chunk::dis(const char* name) {
-	std::printf("=== %s ===\n\n", name);
+	std::printf("=== %s ===\n", name);
 
 	for (int offset = 0; offset < static_cast<int>(m_code.size());) {
 		std::printf("\t%05d ", offset);

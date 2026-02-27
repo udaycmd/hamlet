@@ -2,7 +2,7 @@
 #include "opcode.h"
 
 int main() {
-	hmach::Chunk chunk;
-	chunk.write(hmach::OpCode::Return);
-	chunk.dis("test_chunk");
+	hmach::Chunk c;
+	c.write(hmach::OpCode::Return);
+	c.dis("test");
 }

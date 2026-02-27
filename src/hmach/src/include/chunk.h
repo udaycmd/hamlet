@@ -5,12 +5,14 @@
 
 namespace hmach {
 
-struct Chunk {
-	std::vector<OpCode> m_code;
-
+class Chunk {
+  public:
 	Chunk() : m_code() {}
 	void write(OpCode op);
 	void dis(const char* name);
+
+  private:
+	std::vector<OpCode> m_code;
 };
 
 } // namespace hmach
