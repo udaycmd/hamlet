@@ -48,6 +48,8 @@ const char* to_string(OpCode op) {
 		return "bcall";
 	case OpCode::ArrayLen:
 		return "alen";
+	case OpCode::Const:
+		return "ldc";
 	}
 }
 

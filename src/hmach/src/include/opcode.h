@@ -27,6 +27,7 @@ enum class OpCode : uint8_t {
 	Return,
 	BuiltinCall,
 	ArrayLen,
+	Const
 };
 
 const char* to_string(OpCode op);

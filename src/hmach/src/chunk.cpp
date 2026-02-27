@@ -1,5 +1,6 @@
 #include "chunk.h"
 #include "opcode.h"
+#include "value.h"
 #include <cstdio>
 
 namespace hmach {
@@ -11,11 +12,13 @@ int dis_simple_inst(OpCode op, int offset) {
 
 void Chunk::write(OpCode op) { m_code.emplace_back(op); }
 
-void Chunk::dis(const char* name) {
+void Chunk::write_const(Value v) { m_consts.emplace_back(v); }
+
+void Chunk::dis(const char* name) const {
 	std::printf("=== %s ===\n", name);
 
 	for (int offset = 0; offset < static_cast<int>(m_code.size());) {
-		std::printf("\t%05d ", offset);
+		std::printf("%05d ", offset);
 		auto op = m_code[offset];
 
 		switch (op) {
