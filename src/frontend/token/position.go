@@ -30,12 +30,12 @@ func (p Position) IsValid() bool {
 }
 
 // Returns true if srcpos is valid
-func (sp SrcPos) IsValid() bool {
+func (sp *SrcPos) IsValid() bool {
 	return sp.Line > 0
 }
 
 // Returns a empty string if [SrcPos] is invalid
-func (sp SrcPos) String() string {
+func (sp *SrcPos) String() string {
 	if sp.IsValid() {
 		s := sp.FileName
 		s += fmt.Sprintf("(%d, %d)", sp.Line, sp.Column)
@@ -96,10 +96,14 @@ func (sm *SourceManager) AddFile(filename string, base, size int) *SourceHandle 
 	return sh
 }
 
-// [SourceManager.File] returns the [SourceHandle]
-// of the file in which p resides or returns [nil]
-func (sm *SourceManager) File(p Position) *SourceHandle {
-	return sm.getHandle(p)
+// [SourceManager.SrcPos] returns the [SrcPos]
+// inside the file in which p resides or returns [nil]
+func (sm *SourceManager) SrcPos(p Position) *SrcPos {
+	if h := sm.getHandle(p); h != nil {
+		return h.SrcPos(p)
+	}
+
+	return &SrcPos{Line: -1}
 }
 
 // Helper function for [SourceManager.File]
@@ -172,8 +176,8 @@ func (sh *SourceHandle) Offset(p Position) int {
 }
 
 // [SourceHandle.SrcPos] return a srcpos of the received handle
-func (sh *SourceHandle) SrcPos(p Position) SrcPos {
-	srcPos := SrcPos{}
+func (sh *SourceHandle) SrcPos(p Position) *SrcPos {
+	srcPos := &SrcPos{}
 	if p.IsValid() {
 		if int(p) < sh.Base || int(p) > sh.Base+sh.Len {
 			panic("illegal position")

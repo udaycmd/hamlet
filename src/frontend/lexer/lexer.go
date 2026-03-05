@@ -40,7 +40,7 @@ const (
 )
 
 type (
-	ErrorHandler func(message string, pos token.SrcPos)
+	ErrorHandler func(message string, pos *token.SrcPos)
 
 	// lexing mode
 	LexMode int

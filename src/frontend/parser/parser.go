@@ -19,7 +19,7 @@ type (
 	bailout struct{}
 
 	ParseError struct {
-		position token.SrcPos
+		position *token.SrcPos
 		msg      string
 	}
 
@@ -41,14 +41,14 @@ var (
 )
 
 func (e *ParseError) Error() string {
-	if e.position.FileName != "" || e.position.IsValid() {
-		return fmt.Sprintf("%s: %s", e.position, e.msg)
+	if e.position.IsValid() {
+		return fmt.Sprintf("SyntaxError at %s: %s", e.position, e.msg)
 	}
 
 	return fmt.Sprintf("%s", e.msg)
 }
 
-func (pe *ParseErrors) Extend(pos token.SrcPos, msg string) {
+func (pe *ParseErrors) Extend(pos *token.SrcPos, msg string) {
 	*pe = append(*pe, &ParseError{position: pos, msg: msg})
 }
 
@@ -57,8 +57,8 @@ func (pe ParseErrors) Len() int {
 }
 
 func (pe ParseErrors) Less(i, j int) bool {
-	x := &pe[i].position
-	y := &pe[j].position
+	x := pe[i].position
+	y := pe[j].position
 
 	if x.FileName != y.FileName {
 		return x.FileName < y.FileName
@@ -131,7 +131,7 @@ func NewParser(
 ) *Parser {
 	p := &Parser{file: file, maxReportError: maxReportError, tracing: traceW != nil, traceW: traceW}
 
-	lexerErrorHandlerfunc := func(msg string, pos token.SrcPos) {
+	lexerErrorHandlerfunc := func(msg string, pos *token.SrcPos) {
 		p.errors.Extend(pos, msg)
 	}
 	p.lexer = lexer.NewLexer(p.file, src, lexerErrorHandlerfunc, mode)

@@ -35,16 +35,16 @@ func expectParseError(t *testing.T, input string) error {
 
 func TestParseError(t *testing.T) {
 	err := &ParseError{
-		position: token.SrcPos{Line: 1, Column: 10, FileName: "test.ham"},
+		position: &token.SrcPos{Line: 1, Column: 10, FileName: "test.ham"},
 		msg:      "unexpected token",
 	}
-	expected := "test.ham(1, 10): unexpected token"
+	expected := "SyntaxError at test.ham(1, 10): unexpected token"
 	utils.ExpectEqual(t, expected, err.Error(), "ParseError.Error()")
 }
 
 func TestParseErrorNoFile(t *testing.T) {
 	err := &ParseError{
-		position: token.SrcPos{},
+		position: &token.SrcPos{},
 		msg:      "some error",
 	}
 	expected := "some error"
@@ -53,9 +53,9 @@ func TestParseErrorNoFile(t *testing.T) {
 
 func TestParseErrors(t *testing.T) {
 	var errs ParseErrors
-	errs.Extend(token.SrcPos{Line: 3, Column: 5, FileName: "a.ham"}, "error 3")
-	errs.Extend(token.SrcPos{Line: 1, Column: 1, FileName: "a.ham"}, "error 1")
-	errs.Extend(token.SrcPos{Line: 2, Column: 3, FileName: "a.ham"}, "error 2")
+	errs.Extend(&token.SrcPos{Line: 3, Column: 5, FileName: "a.ham"}, "error 3")
+	errs.Extend(&token.SrcPos{Line: 1, Column: 1, FileName: "a.ham"}, "error 1")
+	errs.Extend(&token.SrcPos{Line: 2, Column: 3, FileName: "a.ham"}, "error 2")
 
 	utils.ExpectEqual(t, 3, errs.Len(), "ParseErrors.Len()")
 
@@ -529,7 +529,7 @@ func TestParseConstStmt(t *testing.T) {
 
 func TestParseUninitializedConstStmt(t *testing.T) {
 	err := expectParseError(t, "const PI")
-	utils.ExpectEqual(t, "testfile(1, 9): expected '=', found newline", err.Error(), "Uninitialized const error")
+	utils.ExpectEqual(t, "SyntaxError at testfile(1, 9): expected '=', found newline", err.Error(), "Uninitialized const error")
 }
 
 func TestParseReturnStmt(t *testing.T) {
