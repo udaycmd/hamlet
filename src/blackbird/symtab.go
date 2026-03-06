@@ -103,6 +103,15 @@ func (st *SymbolTable) InitScope(block bool) *SymbolTable {
 	}
 }
 
+// ParentScope return the SymbolTable of parent scope of the current scope
+func (st *SymbolTable) ParentScope(skipBlock bool) *SymbolTable {
+	if skipBlock && st.block {
+		return st.surrounding.ParentScope(skipBlock)
+	}
+
+	return st.surrounding
+}
+
 func (st *SymbolTable) UpValue(s0 *Symbol) *Symbol {
 	st.upvalues = append(st.upvalues, s0)
 	s1 := &Symbol{

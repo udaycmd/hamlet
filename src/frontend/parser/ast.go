@@ -145,6 +145,7 @@ func (s *BadStmt) End() token.Position   { return s.To }
 func (s *ExprStmt) stmtNode()             {}
 func (s *ExprStmt) Start() token.Position { return s.Start() }
 func (s *ExprStmt) End() token.Position   { return s.End() }
+func (s *ExprStmt) Get() Expr             { return s.e }
 
 func (s *EmptyStmt) stmtNode()             {}
 func (s *EmptyStmt) Start() token.Position { return s.Semicolon }

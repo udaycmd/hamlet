@@ -76,7 +76,7 @@ func (sm *SourceManager) AddFile(filename string, base, size int) *SourceHandle 
 	}
 
 	sh := &SourceHandle{
-		manager: sm,
+		Manager: sm,
 		Name:    filename,
 		Base:    base,
 		Len:     size,
@@ -141,7 +141,7 @@ type SourceHandle struct {
 	Len   int    // size of the file
 	Lines []int  // Lines contains the offset of the first character for each line (first entry is always 0)
 
-	manager *SourceManager // handle manager of the file
+	Manager *SourceManager // handle manager of the file
 }
 
 // LineCount returns the current number of lines
